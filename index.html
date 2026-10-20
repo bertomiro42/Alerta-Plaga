@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bitácora de parcela de Alberto</title>
+</head>
+<body>
+  <header>
+    <div class="barra">
+      <h1>Bitácora de parcela de Alberto</h1>
+      <button id="tema" type="button" class="tema" aria-label="Cambiar a modo claro" title="Modo claro">☀️</button>
+    </div>
+  </header>
+
+  <main>
+    <form id="registro" class="tarjeta">
+      <div class="dos">
+        <div class="campo">
+          <label for="fecha">📅 Fecha</label>
+          <input id="fecha" type="date" name="fecha" required>
+        </div>
+        <div class="campo">
+          <label for="cultivo">🌱 Cultivo</label>
+          <select id="cultivo" name="cultivo">
+            <option value="Maíz">🌽 Maíz</option>
+            <option value="Frijol">🫘 Frijol</option>
+            <option value="Haba">🫛 Haba</option>
+            <option value="Avena">🌾 Avena</option>
+          </select>
+        </div>
+      </div>
+      <div class="campo">
+        <label for="parcela">📍 Parcela</label>
+        <select id="parcela" name="parcela">
+          <option value="P-077 El Cerrito">📍 P-077 El Cerrito</option>
+          <option value="P-012 La Loma">📍 P-012 La Loma</option>
+          <option value="P-031 San Diego">📍 P-031 San Diego</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="actividad">🚜 Actividad</label>
+        <select id="actividad" name="actividad">
+          <option value="Observación">👁️ Observación</option>
+          <option value="Riego">💧 Riego</option>
+          <option value="Fertilización">🌱 Fertilización</option>
+          <option value="Muestreo">🔬 Muestreo</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="observaciones">📝 Observaciones</label>
+        <textarea id="observaciones" name="observaciones" rows="8"></textarea>
+      </div>
+      <button type="submit">💾 Guardar registro</button>
+      <p id="estado" class="estado" role="status"></p>
+    </form>
+
+    <section class="tarjeta tabla">
+      <table id="registros">
+        <thead>
+          <tr><th>📅 Fecha</th><th>📍 Parcela</th><th>🌱 Cultivo</th><th>🚜 Actividad</th><th>📝 Observaciones</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
