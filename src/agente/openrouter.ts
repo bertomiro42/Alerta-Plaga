@@ -19,6 +19,21 @@ export class ErrorOpenRouter extends Error {
 
 const URL_COMPLETIONS = "https://openrouter.ai/api/v1/chat/completions";
 
+/**
+ * Traduce el valor de OPENROUTER_RAZONAMIENTO al parámetro `reasoning` de
+ * OpenRouter: "off" lo desactiva, "low"/"medium"/"high" ajustan el esfuerzo y
+ * un número se interpreta como tope de tokens de razonamiento.
+ */
+function objetoRazonamiento(valor: string | undefined): Record<string, unknown> | null {
+  const limpio = (valor ?? "").trim().toLowerCase();
+  if (!limpio || limpio === "auto" || limpio === "default") return null;
+  if (["off", "none", "false", "no", "0"].includes(limpio)) return { enabled: false };
+  if (["low", "medium", "high"].includes(limpio)) return { effort: limpio };
+  const tope = Number(limpio);
+  if (Number.isFinite(tope) && tope > 0) return { max_tokens: tope };
+  return null;
+}
+
 function contenidoATexto(contenido: unknown): string {
   if (typeof contenido === "string") return contenido;
   if (Array.isArray(contenido)) {
@@ -38,10 +53,12 @@ export async function completar(
   apiKey: string,
   modelo: string,
   mensajes: Mensaje[],
-  opciones: { json?: boolean } = {},
+  opciones: { json?: boolean; razonamiento?: string } = {},
 ): Promise<string> {
   if (!apiKey) throw new ErrorOpenRouter("Falta OPENROUTER_API_KEY.");
   if (!modelo) throw new ErrorOpenRouter("No hay modelo de OpenRouter configurado.");
+
+  const razonamiento = objetoRazonamiento(opciones.razonamiento);
 
   let respuesta: Response;
   try {
@@ -58,6 +75,7 @@ export async function completar(
         messages: mensajes,
         temperature: 0,
         ...(opciones.json ? { response_format: { type: "json_object" } } : {}),
+        ...(razonamiento ? { reasoning: razonamiento } : {}),
       }),
       signal: AbortSignal.timeout(120_000),
     });

@@ -11,6 +11,7 @@ export type OpcionesClasificador = {
   modelo: string;
   modeloVision: string;
   modeloAudio: string;
+  razonamiento: string;
   catalogo: Plaga[];
   /** Caché de transcripciones, para no volver a transcribir la misma nota de voz. */
   transcripciones?: Record<string, string>;
@@ -127,7 +128,7 @@ export async function clasificar(
         { role: "system", content: instruccionesSistema(opciones.catalogo) },
         { role: "user", content: partes },
       ],
-      { json: true },
+      { json: true, razonamiento: opciones.razonamiento },
     );
   } catch (error) {
     log.error(

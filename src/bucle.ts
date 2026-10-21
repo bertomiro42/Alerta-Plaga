@@ -78,6 +78,7 @@ async function interpretarConCache(ctx: Contexto, reporte: Reporte): Promise<Cla
       modelo: ctx.config.modelo,
       modeloVision: ctx.config.modeloVision,
       modeloAudio: ctx.config.modeloAudio,
+      razonamiento: ctx.config.razonamiento,
       catalogo: ctx.catalogo,
       transcripciones: ctx.estado.transcripciones,
     },

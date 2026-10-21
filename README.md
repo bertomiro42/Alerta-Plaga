@@ -82,6 +82,7 @@ Están todas, comentadas, en `.env.example`. Las importantes:
 | `OPENROUTER_MODEL` | Modelo para texto. |
 | `OPENROUTER_MODEL_VISION` | Modelo con visión para fotos. |
 | `OPENROUTER_MODEL_AUDIO` | Modelo que acepte audio para notas de voz. |
+| `OPENROUTER_RAZONAMIENTO` | Esfuerzo de razonamiento: `low`, `medium`, `high`, `off` o tokens. |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_COORDINADOR_CHAT_ID` | Bot y destinatario de los avisos. |
 | `INTERVALO_S` | Cada cuántos segundos se consultan mensajes (por defecto 60). |
 | `SIMULACION` | `true` = solo validar, sin registrar. |

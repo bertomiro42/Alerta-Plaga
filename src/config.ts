@@ -8,6 +8,7 @@ export type Config = {
   modelo: string;
   modeloVision: string;
   modeloAudio: string;
+  razonamiento: string;
   telegramBotToken: string;
   telegramCoordinador: string;
   intervaloS: number;
@@ -67,6 +68,7 @@ export function cargarConfig(): Config {
     modelo,
     modeloVision: texto("OPENROUTER_MODEL_VISION") || modelo,
     modeloAudio: texto("OPENROUTER_MODEL_AUDIO"),
+    razonamiento: texto("OPENROUTER_RAZONAMIENTO", "low"),
     telegramBotToken: texto("TELEGRAM_BOT_TOKEN"),
     telegramCoordinador: texto("TELEGRAM_COORDINADOR_CHAT_ID"),
     intervaloS: numero("INTERVALO_S", 60),

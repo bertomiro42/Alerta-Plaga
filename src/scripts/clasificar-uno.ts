@@ -53,6 +53,7 @@ const clasificacion = await clasificar(
     modelo: config.modelo,
     modeloVision: config.modeloVision,
     modeloAudio: config.modeloAudio,
+    razonamiento: config.razonamiento,
     catalogo,
   },
   reporte,
