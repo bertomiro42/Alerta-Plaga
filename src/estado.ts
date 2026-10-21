@@ -20,7 +20,7 @@ export type CasoGuardado = Caso & {
 export type Estadisticas = {
   ciclos: number;
   registrados: number;
-  urgentes: number;
+  avisos: number;
   errores: number;
   ultimoCiclo: string | null;
 };
@@ -47,7 +47,7 @@ export function estadoInicial(): Estado {
     clasificaciones: {},
     transcripciones: {},
     casos: [],
-    estadisticas: { ciclos: 0, registrados: 0, urgentes: 0, errores: 0, ultimoCiclo: null },
+    estadisticas: { ciclos: 0, registrados: 0, avisos: 0, errores: 0, ultimoCiclo: null },
   };
 }
 

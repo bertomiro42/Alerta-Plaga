@@ -2,8 +2,8 @@ import { cargarConfig, exigir } from "./config.ts";
 import { log } from "./logger.ts";
 import { ClienteApi } from "./api/cliente.ts";
 import { cargarCatalogo } from "./catalogo.ts";
+import type { Parcela } from "./tipos.ts";
 import { cargarEstado } from "./estado.ts";
-import { esUrgente } from "./reglas.ts";
 import { Telegram } from "./telegram.ts";
 import { Supabase } from "./datos/supabase.ts";
 import { ejecutarCiclo, type Contexto } from "./bucle.ts";
@@ -37,8 +37,18 @@ async function main(): Promise<void> {
   }
 
   const catalogo = await cargarCatalogo(cliente);
-  const urgentes = catalogo.filter((plaga) => esUrgente(plaga));
-  log.info(`Catálogo cargado: ${catalogo.length} plagas (${urgentes.length} serían urgentes por regla).`);
+  const cuarentenarias = catalogo.filter((plaga) => plaga.cuarentenaria);
+  log.info(
+    `Catálogo cargado: ${catalogo.length} plagas (${cuarentenarias.length} cuarentenarias, ${catalogo.filter((p) => p.especialidad).length} con especialidad).`,
+  );
+
+  const parcelas = new Map<string, Parcela>();
+  try {
+    for (const parcela of await cliente.parcelas()) parcelas.set(parcela.id, parcela);
+    log.info(`Parcelas cargadas: ${parcelas.size}.`);
+  } catch (error) {
+    log.aviso(`No se pudieron cargar las parcelas: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   if (config.simulacion) {
     log.aviso("SIMULACION=true: solo se valida el formato con POST /casos/validar. Nada se registra ni se avisa.");
@@ -50,7 +60,16 @@ async function main(): Promise<void> {
     log.aviso("Supabase sin configurar: los casos solo quedarán en .data/estado.json.");
   }
 
-  const ctx: Contexto = { config, cliente, catalogo, estado, telegram, supabase };
+  const ctx: Contexto = {
+    config,
+    cliente,
+    catalogo,
+    parcelas,
+    estado,
+    telegram,
+    supabase,
+    cacheTecnicos: new Map(),
+  };
   iniciarServidorWeb(config, () => ctx.estado, supabase);
 
   let activo = true;
@@ -68,7 +87,7 @@ async function main(): Promise<void> {
       const resumen = await ejecutarCiclo(ctx);
       if (resumen.nuevos > 0 || resumen.registrados > 0 || resumen.pendientes > 0) {
         log.info(
-          `Ciclo: ${resumen.nuevos} nuevos, ${resumen.registrados} registrados, ${resumen.urgentes} urgentes, ${resumen.pendientes} pendientes.`,
+          `Ciclo: ${resumen.nuevos} nuevos, ${resumen.registrados} registrados, ${resumen.avisos} avisos, ${resumen.pendientes} pendientes.`,
         );
       }
     } catch (error) {

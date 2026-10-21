@@ -1,4 +1,16 @@
-import type { Aviso, Caso, Reporte } from "../tipos.ts";
+import type { Aviso, Caso, CasoPrevio, Parcela, Reporte, Tecnico } from "../tipos.ts";
+
+/** Acepta la respuesta como lista directa o envuelta en una clave. */
+function comoLista<T>(datos: unknown, claves: string[]): T[] {
+  if (Array.isArray(datos)) return datos as T[];
+  if (typeof datos === "object" && datos !== null) {
+    const obj = datos as Record<string, unknown>;
+    for (const clave of claves) {
+      if (Array.isArray(obj[clave])) return obj[clave] as T[];
+    }
+  }
+  return [];
+}
 
 /** Error de comunicación con la API del hackathon. */
 export class ErrorApi extends Error {
@@ -110,5 +122,27 @@ export class ClienteApi {
       datos: await respuesta.arrayBuffer(),
       tipoContenido: respuesta.headers.get("content-type") ?? "application/octet-stream",
     };
+  }
+
+  /** El catálogo de parcelas (cultivo, superficie, etapa y coordenadas). */
+  async parcelas(): Promise<Parcela[]> {
+    return comoLista<Parcela>(await this.pedir<unknown>("GET", "/parcelas"), ["parcelas", "items"]);
+  }
+
+  /** Los técnicos con su carga calculada a esa hora (usa la hora `recibido` del mensaje). */
+  async tecnicos(momento?: string): Promise<Tecnico[]> {
+    const consulta = new URLSearchParams();
+    if (momento) consulta.set("momento", momento);
+    const ruta = consulta.size > 0 ? `/tecnicos?${consulta.toString()}` : "/tecnicos";
+    return comoLista<Tecnico>(await this.pedir<unknown>("GET", ruta), ["tecnicos", "items"]);
+  }
+
+  /** Casos de la semana pasada con su respuesta correcta: sirven para probar las reglas. */
+  async casosPrevios(): Promise<CasoPrevio[]> {
+    return comoLista<CasoPrevio>(await this.pedir<unknown>("GET", "/casos-previos"), [
+      "casos",
+      "casos_previos",
+      "items",
+    ]);
   }
 }

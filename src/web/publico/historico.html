@@ -26,7 +26,9 @@
             <th>Parcela</th>
             <th>¿Plaga?</th>
             <th>Plaga</th>
-            <th>Urgente</th>
+            <th>Semáforo</th>
+            <th>Técnico</th>
+            <th>Prioridad</th>
             <th>Recibido</th>
           </tr>
         </thead>
@@ -37,6 +39,7 @@
     <script>
       function fila(caso) {
         const fecha = caso.recibido ? new Date(caso.recibido).toLocaleString("es-MX", { hour12: false }) : "—";
+        const semaforo = caso.semaforo ? `<span class="${caso.semaforo}">${caso.semaforo}</span>` : '<span class="no">—</span>';
         return `<tr>
           <td>${caso.reporte_id}</td>
           <td>${caso.tipo ?? ""}</td>
@@ -44,7 +47,9 @@
           <td>${caso.parcela_id ?? ""}</td>
           <td>${caso.es_plaga ? "sí" : "no"}</td>
           <td><code>${caso.plaga ?? "—"}</code></td>
-          <td>${caso.urgente ? '<span class="si">sí</span>' : '<span class="no">no</span>'}</td>
+          <td>${semaforo}</td>
+          <td>${caso.tecnico_id ?? "—"}</td>
+          <td>${caso.prioridad ?? "—"}</td>
           <td>${fecha}</td>
         </tr>`;
       }

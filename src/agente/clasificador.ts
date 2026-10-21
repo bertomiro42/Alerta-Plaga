@@ -44,7 +44,18 @@ function interpretarRespuesta(texto: string): Clasificacion | null {
 
   const confianza = typeof obj["confianza"] === "number" ? obj["confianza"] : 0;
   const motivo = typeof obj["motivo"] === "string" ? obj["motivo"] : "";
-  return { es_plaga: esPlaga, plaga, confianza, motivo };
+  return { es_plaga: esPlaga, plaga, pct: interpretarPct(obj["pct"]), confianza, motivo };
+}
+
+/** El porcentaje afectado: entero de 0 a 100, o null si el productor no lo dijo. */
+function interpretarPct(valor: unknown): number | null {
+  let numero: number | null = null;
+  if (typeof valor === "number" && Number.isFinite(valor)) numero = valor;
+  else if (typeof valor === "string" && valor.trim() !== "" && Number.isFinite(Number(valor))) {
+    numero = Number(valor);
+  }
+  if (numero === null) return null;
+  return Math.max(0, Math.min(100, Math.round(numero)));
 }
 
 function describir(reporte: Reporte, pie: string): string {

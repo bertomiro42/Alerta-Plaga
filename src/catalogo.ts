@@ -39,8 +39,26 @@ function listaTextos(obj: Record<string, unknown>, claves: string[]): string[] {
       const textos = valor.filter((v): v is string => typeof v === "string" && v.trim() !== "").map((v) => v.trim());
       if (textos.length) return textos;
     }
+    if (typeof valor === "string" && valor.trim()) return [valor.trim()];
   }
   return [];
+}
+
+/** Lee un objeto del tipo { "maíz": ["V4", "V6"] } y lo deja como Record<string, string[]>. */
+function mapaEtapas(obj: Record<string, unknown>, claves: string[]): Record<string, string[]> {
+  for (const clave of claves) {
+    const valor = obj[clave];
+    if (typeof valor === "object" && valor !== null && !Array.isArray(valor)) {
+      const salida: Record<string, string[]> = {};
+      for (const [cultivo, etapas] of Object.entries(valor as Record<string, unknown>)) {
+        if (Array.isArray(etapas)) {
+          salida[cultivo] = etapas.filter((x): x is string => typeof x === "string");
+        }
+      }
+      return salida;
+    }
+  }
+  return {};
 }
 
 function primerBooleano(obj: Record<string, unknown>, claves: string[]): boolean {
@@ -71,7 +89,21 @@ export function normalizarPlaga(valor: unknown): Plaga {
   const sintomas = textoLargo(obj, ["sintomas", "descripcion", "signos", "danio", "daño"]);
   const severidad = primerTexto(obj, ["severidad", "nivel", "riesgo", "gravedad"]);
   const cuarentenaria = primerBooleano(obj, ["cuarentenaria", "es_cuarentenaria", "cuarentena"]);
-  return { id, nombre, nombresLocales, sintomas, severidad, cuarentenaria, crudo: obj };
+  return {
+    id,
+    nombre,
+    nombreCientifico: primerTexto(obj, ["nombre_cientifico", "cientifico"]),
+    nombresLocales,
+    tipo: primerTexto(obj, ["tipo", "categoria"]),
+    especialidad: primerTexto(obj, ["especialidad", "area", "disciplina"]),
+    severidad,
+    cuarentenaria,
+    cultivos: listaTextos(obj, ["cultivos", "cultivo"]),
+    sintomas,
+    etapasCriticas: mapaEtapas(obj, ["etapas_criticas", "etapasCriticas"]),
+    etapasSusceptibles: mapaEtapas(obj, ["etapas_susceptibles", "etapasSusceptibles"]),
+    crudo: obj,
+  };
 }
 
 /** Lee GET /plagas y devuelve el catálogo normalizado. */
@@ -112,8 +144,9 @@ export function catalogoParaPrompt(catalogo: Plaga[]): string {
   return catalogo
     .map((plaga) => {
       const locales = plaga.nombresLocales.length > 0 ? ` | nombres locales: ${plaga.nombresLocales.join(", ")}` : "";
+      const cultivos = plaga.cultivos.length > 0 ? ` | cultivos: ${plaga.cultivos.join(", ")}` : "";
       const cuarentena = plaga.cuarentenaria ? "sí" : "no";
-      return `- id: ${plaga.id} | nombre: ${plaga.nombre}${locales} | severidad: ${plaga.severidad || "no indicada"} | cuarentenaria: ${cuarentena} | síntomas: ${plaga.sintomas || "no indicados"}`;
+      return `- id: ${plaga.id} | nombre: ${plaga.nombre}${locales}${cultivos} | severidad: ${plaga.severidad || "no indicada"} | cuarentenaria: ${cuarentena} | síntomas: ${plaga.sintomas || "no indicados"}`;
     })
     .join("\n");
 }

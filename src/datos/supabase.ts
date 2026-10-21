@@ -8,7 +8,9 @@ export type FilaCaso = {
   parcela_id: string | null;
   es_plaga: boolean;
   plaga: string | null;
-  urgente: boolean;
+  semaforo: string | null;
+  tecnico_id: string | null;
+  prioridad: number | null;
   confianza: number | null;
   motivo: string | null;
   texto: string | null;

@@ -1,29 +1,33 @@
-import type { Caso, Clasificacion, Plaga, Reporte } from "./tipos.ts";
+import type { Caso, Clasificacion, Parcela, Plaga, Reporte, Semaforo, Tecnico } from "./tipos.ts";
 import type { ClienteApi } from "./api/cliente.ts";
 import type { Config } from "./config.ts";
 import type { Supabase } from "./datos/supabase.ts";
 import type { CasoGuardado, Estado } from "./estado.ts";
 import type { Telegram } from "./telegram.ts";
-import { ErrorApi } from "./api/cliente.ts";
 import { clasificar } from "./agente/clasificador.ts";
 import { buscarPlaga } from "./catalogo.ts";
-import { esUrgente, explicarUrgencia } from "./reglas.ts";
+import { calcularPrioridad, detallePrioridad, PCT_POR_DEFECTO, semaforoDePrioridad } from "./dominio/prioridad.ts";
+import { elegirTecnico } from "./dominio/tecnico.ts";
 import { guardarEstado } from "./estado.ts";
+import { ErrorApi } from "./api/cliente.ts";
 import { log } from "./logger.ts";
 
 export type Contexto = {
   config: Config;
   cliente: ClienteApi;
   catalogo: Plaga[];
+  parcelas: Map<string, Parcela>;
   estado: Estado;
   telegram: Telegram;
   supabase: Supabase;
+  /** Caché de técnicos por momento, para no repetir consultas. */
+  cacheTecnicos: Map<string, Tecnico[]>;
 };
 
 export type ResumenCiclo = {
   nuevos: number;
   registrados: number;
-  urgentes: number;
+  avisos: number;
   pendientes: number;
 };
 
@@ -90,31 +94,86 @@ async function interpretarConCache(ctx: Contexto, reporte: Reporte): Promise<Cla
   return clasificacion;
 }
 
+/** Los técnicos a la hora del mensaje (la carga cambia con el tiempo). */
+async function tecnicosEn(ctx: Contexto, momento: string): Promise<Tecnico[]> {
+  const clave = momento.slice(0, 19);
+  const guardado = ctx.cacheTecnicos.get(clave);
+  if (guardado) return guardado;
+
+  const lista = await ctx.cliente.tecnicos(momento);
+  ctx.cacheTecnicos.set(clave, lista);
+  if (ctx.cacheTecnicos.size > 400) ctx.cacheTecnicos.clear();
+  return lista;
+}
+
+export type Decision = {
+  semaforo: Semaforo | null;
+  tecnicoId: string | null;
+  prioridad: number | null;
+  detalle: string;
+};
+
+/** Aplica las reglas del reto: prioridad, semáforo y técnico. Nada de IA. */
+async function decidir(
+  ctx: Contexto,
+  reporte: Reporte,
+  plaga: Plaga | undefined,
+  pct: number | null,
+): Promise<Decision> {
+  const nada = (detalle: string): Decision => ({ semaforo: null, tecnicoId: null, prioridad: null, detalle });
+
+  if (!plaga) return nada("sin plaga identificada: no se calcula");
+  if (!reporte.parcela_id) return nada("el mensaje no trae parcela: no se calcula");
+
+  const parcela = ctx.parcelas.get(reporte.parcela_id);
+  if (!parcela) return nada(`no encontramos la parcela ${reporte.parcela_id}`);
+
+  const porcentaje = pct ?? PCT_POR_DEFECTO;
+  const prioridad = calcularPrioridad(plaga, parcela, porcentaje);
+  const semaforo = semaforoDePrioridad(prioridad);
+
+  let tecnicoId: string | null = null;
+  try {
+    tecnicoId = elegirTecnico(await tecnicosEn(ctx, reporte.recibido), plaga, parcela);
+  } catch (error) {
+    log.aviso(`No se pudieron consultar los técnicos para ${reporte.id}: ${String(error)}`);
+  }
+
+  return {
+    semaforo,
+    tecnicoId,
+    prioridad,
+    detalle: `${detallePrioridad(plaga, parcela, porcentaje)} → ${prioridad} (${semaforo})`,
+  };
+}
+
 function guardarEnPanel(ctx: Contexto, guardado: CasoGuardado): void {
   const indice = ctx.estado.casos.findIndex((caso) => caso.reporte_id === guardado.reporte_id);
   if (indice >= 0) ctx.estado.casos[indice] = guardado;
   else ctx.estado.casos.push(guardado);
 }
 
-type ResultadoProceso = { resuelto: boolean; urgente: boolean };
+type ResultadoProceso = { resuelto: boolean; aviso: boolean };
 
 /**
- * Resuelve un mensaje de principio a fin: interpreta, decide urgencia, avisa y registra.
+ * Resuelve un mensaje de principio a fin: interpreta, decide (reglas), avisa y registra.
  * `resuelto` es false cuando hay que reintentarlo (no se registró nada).
  */
 async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<ResultadoProceso> {
   const clasificacion = await interpretarConCache(ctx, reporte);
-  if (!clasificacion) return { resuelto: false, urgente: false };
+  if (!clasificacion) return { resuelto: false, aviso: false };
 
   const plaga = clasificacion.es_plaga ? buscarPlaga(ctx.catalogo, clasificacion.plaga) : undefined;
-  const urgente = clasificacion.es_plaga && esUrgente(plaga);
-  const motivo = clasificacion.es_plaga ? explicarUrgencia(plaga) : "no es reporte de plaga";
+  const decision = await decidir(ctx, reporte, plaga, clasificacion.pct);
+  const avisa = decision.semaforo === "rojo" || decision.semaforo === "naranja";
 
   const caso: Caso = {
     reporte_id: reporte.id,
     es_plaga: clasificacion.es_plaga,
     plaga: clasificacion.es_plaga ? (clasificacion.plaga ?? "desconocida") : null,
-    urgente,
+    semaforo: decision.semaforo,
+    tecnico_id: decision.tecnicoId,
+    prioridad: decision.prioridad,
     caso: `AP-${reporte.id}`,
   };
 
@@ -135,25 +194,26 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      return { resuelto: false, urgente };
+      return { resuelto: false, aviso: avisa };
     }
   }
 
   const transcripcion = ctx.estado.transcripciones[reporte.id] ?? null;
 
   let avisado = false;
-  if (urgente) {
+  if (avisa && decision.semaforo) {
     if (ctx.config.simulacion) {
-      // En simulación no se avisa, para no llenar el Telegram del coordinador.
-      log.aviso(`[simulación] Se avisaría al coordinador por ${reporte.id}: ${motivo}`);
+      log.aviso(`[simulación] Se avisaría al coordinador por ${reporte.id}: semáforo ${decision.semaforo}`);
     } else {
-      avisado = await ctx.telegram.avisarUrgente({
+      avisado = await ctx.telegram.avisarCaso({
         reporteId: reporte.id,
-        productor: reporte.productor_id,
-        parcela: reporte.parcela_id,
+        semaforo: decision.semaforo,
         plaga: caso.plaga ?? "desconocida",
         nombrePlaga: plaga?.nombre ?? "desconocida",
-        motivo,
+        motivo: decision.detalle,
+        tecnicoId: decision.tecnicoId,
+        productor: reporte.productor_id,
+        parcela: reporte.parcela_id,
         texto: reporte.texto ?? transcripcion ?? "",
         lat: reporte.lat,
         lon: reporte.lon,
@@ -168,8 +228,9 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
           tipo: plaga?.cuarentenaria ? "cuarentenaria" : "escalamiento",
           para: "coordinador",
           mensaje:
-            `Aviso urgente de plaga: ${plaga?.nombre ?? "desconocida"} (${caso.plaga ?? "desconocida"}). ` +
-            `Motivo: ${motivo}. Productor: ${reporte.productor_id ?? "sin dato"} · Parcela: ${reporte.parcela_id ?? "sin dato"}.` +
+            `Caso ${decision.semaforo} de plaga: ${plaga?.nombre ?? "desconocida"} (${caso.plaga ?? "desconocida"}). ` +
+            `Prioridad ${decision.prioridad ?? "?"}. Técnico: ${decision.tecnicoId ?? "sin técnico disponible"}. ` +
+            `Productor: ${reporte.productor_id ?? "sin dato"} · Parcela: ${reporte.parcela_id ?? "sin dato"}.` +
             (resumen ? ` Mensaje: «${resumen}»` : ""),
         });
       } catch (error) {
@@ -180,7 +241,7 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
         );
       }
 
-      ctx.estado.estadisticas.urgentes++;
+      ctx.estado.estadisticas.avisos++;
     }
   }
 
@@ -198,10 +259,11 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
   });
 
   const etiqueta = ctx.config.simulacion ? " [simulación]" : "";
-  const decision = caso.es_plaga ? `plaga: ${caso.plaga}` : "no es plaga";
-  log.info(`${reporte.id} (${reporte.tipo}) → ${decision}${urgente ? " · URGENTE" : ""}${etiqueta}`);
+  const decisionTexto = caso.es_plaga ? `plaga: ${caso.plaga}` : "no es plaga";
+  const semaforoTexto = decision.semaforo ? ` · ${decision.semaforo}${decision.tecnicoId ? ` → ${decision.tecnicoId}` : ""}` : "";
+  log.info(`${reporte.id} (${reporte.tipo}) → ${decisionTexto}${semaforoTexto}${etiqueta}`);
 
-  if (ctx.config.simulacion) return { resuelto: false, urgente };
+  if (ctx.config.simulacion) return { resuelto: false, aviso: avisa };
   ctx.estado.estadisticas.registrados++;
 
   // Copia en la base de datos. Va al final y nunca tumba el ciclo.
@@ -213,7 +275,9 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
       parcela_id: reporte.parcela_id,
       es_plaga: caso.es_plaga,
       plaga: caso.plaga ?? null,
-      urgente,
+      semaforo: decision.semaforo,
+      tecnico_id: decision.tecnicoId,
+      prioridad: decision.prioridad,
       confianza: clasificacion.confianza,
       motivo: clasificacion.motivo,
       texto: reporte.texto,
@@ -225,12 +289,12 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
     });
   }
 
-  return { resuelto: true, urgente };
+  return { resuelto: true, aviso: avisa };
 }
 
 /** Un ciclo completo: recibir → interpretar → decidir → avisar → registrar. */
 export async function ejecutarCiclo(ctx: Contexto): Promise<ResumenCiclo> {
-  const resumen: ResumenCiclo = { nuevos: 0, registrados: 0, urgentes: 0, pendientes: 0 };
+  const resumen: ResumenCiclo = { nuevos: 0, registrados: 0, avisos: 0, pendientes: 0 };
 
   const traidos = await traerReportes(ctx.cliente, desdeParaConsulta(ctx.estado, ctx.config));
 
@@ -259,7 +323,7 @@ export async function ejecutarCiclo(ctx: Contexto): Promise<ResumenCiclo> {
 
     try {
       const resultado = await procesarReporte(ctx, reporte);
-      if (resultado.urgente) resumen.urgentes++;
+      if (resultado.aviso) resumen.avisos++;
       if (resultado.resuelto) {
         procesados.add(reporte.id);
         resumen.registrados++;

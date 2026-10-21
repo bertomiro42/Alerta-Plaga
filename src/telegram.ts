@@ -1,3 +1,4 @@
+import type { Semaforo } from "./tipos.ts";
 import { log } from "./logger.ts";
 
 export function escaparHtml(texto: string | null | undefined): string {
@@ -6,6 +7,13 @@ export function escaparHtml(texto: string | null | undefined): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
+
+const EMOJI: Record<Semaforo, string> = {
+  rojo: "🚨",
+  naranja: "🔶",
+  amarillo: "🟡",
+  verde: "🟢",
+};
 
 /** Envía avisos al coordinador por el bot de Telegram. */
 export class Telegram {
@@ -56,24 +64,28 @@ export class Telegram {
     }
   }
 
-  /** Aviso de un caso urgente, con los datos del mensaje. */
-  async avisarUrgente(datos: {
+  /** Aviso de un caso rojo o naranja, con plaga, parcela y técnico. */
+  async avisarCaso(datos: {
     reporteId: string;
-    productor: string;
-    parcela: string;
+    semaforo: Semaforo;
     plaga: string;
     nombrePlaga: string;
     motivo: string;
+    tecnicoId: string | null;
+    productor: string | null;
+    parcela: string | null;
     texto: string;
     lat: number | null;
     lon: number | null;
   }): Promise<boolean> {
+    const tecnico = datos.tecnicoId ?? "sin técnico disponible";
     const lineas = [
-      "🚨 <b>Aviso urgente de plaga</b>",
+      `${EMOJI[datos.semaforo]} <b>Caso ${escaparHtml(datos.semaforo)}</b>`,
       `Folio: <code>${escaparHtml(datos.reporteId)}</code>`,
       `Plaga: <b>${escaparHtml(datos.nombrePlaga)}</b> (<code>${escaparHtml(datos.plaga)}</code>)`,
-      `Motivo de urgencia: ${escaparHtml(datos.motivo)}`,
-      `Productor: ${escaparHtml(datos.productor)} · Parcela: ${escaparHtml(datos.parcela)}`,
+      `Técnico asignado: <b>${escaparHtml(tecnico)}</b>`,
+      `Productor: ${escaparHtml(datos.productor ?? "sin dato")} · Parcela: ${escaparHtml(datos.parcela ?? "sin dato")}`,
+      `Motivo: ${escaparHtml(datos.motivo)}`,
     ];
     if (datos.lat !== null && datos.lon !== null) {
       lineas.push(`Ubicación: https://maps.google.com/?q=${datos.lat},${datos.lon}`);

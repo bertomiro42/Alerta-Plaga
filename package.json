@@ -12,6 +12,7 @@
     "dev": "node --watch --env-file-if-exists=.env src/index.ts",
     "typecheck": "tsc --noEmit",
     "plagas": "node --env-file-if-exists=.env src/scripts/ver-plagas.ts",
+    "reglas": "node --env-file-if-exists=.env src/scripts/probar-reglas.ts",
     "probar": "node --env-file-if-exists=.env src/scripts/clasificar-uno.ts",
     "modelos": "node --env-file-if-exists=.env src/scripts/listar-modelos.ts",
     "telegram": "node --env-file-if-exists=.env src/scripts/probar-telegram.ts"

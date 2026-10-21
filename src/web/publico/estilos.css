@@ -109,3 +109,23 @@ code {
 .no {
   color: var(--gris);
 }
+
+.rojo {
+  color: #b3261e;
+  font-weight: 700;
+}
+
+.naranja {
+  color: #c25e00;
+  font-weight: 700;
+}
+
+.amarillo {
+  color: #8a7200;
+  font-weight: 600;
+}
+
+.verde {
+  color: #256029;
+  font-weight: 600;
+}

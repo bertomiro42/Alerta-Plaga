@@ -9,13 +9,15 @@ if (!config.telegramBotToken || !config.telegramCoordinador) {
 }
 
 const telegram = new Telegram(config.telegramBotToken, config.telegramCoordinador, false);
-const enviado = await telegram.avisarUrgente({
+const enviado = await telegram.avisarCaso({
   reporteId: "PRUEBA-001",
-  productor: "PR-000",
-  parcela: "P-000 (prueba)",
+  semaforo: "rojo",
   plaga: "gusano_cogollero",
   nombrePlaga: "Gusano cogollero — mensaje de prueba",
-  motivo: "cuarentenaria (ejemplo)",
+  motivo: "severidad alta 40 + superficie 25 + etapa 25",
+  tecnicoId: "T-02",
+  productor: "PR-000",
+  parcela: "P-000 (prueba)",
   texto: "Mensaje de prueba del sistema Alerta Plaga.",
   lat: 19.5112,
   lon: -98.8817,

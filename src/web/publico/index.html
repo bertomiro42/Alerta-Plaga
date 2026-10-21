@@ -27,7 +27,9 @@
             <th>Tipo</th>
             <th>¿Plaga?</th>
             <th>Plaga</th>
-            <th>Urgente</th>
+            <th>Semáforo</th>
+            <th>Técnico</th>
+            <th>Prioridad</th>
             <th>Registrado</th>
           </tr>
         </thead>
@@ -43,15 +45,21 @@
       }
 
       function fila(caso) {
-        const urgente = caso.urgente ? '<span class="si">sí</span>' : '<span class="no">no</span>';
+        const semaforo = caso.semaforo
+          ? `<span class="${caso.semaforo}">${caso.semaforo}</span>`
+          : "<span class=\"no\">—</span>";
         const plaga = caso.plaga ?? "—";
+        const tecnico = caso.tecnico_id ?? "—";
+        const prioridad = caso.prioridad ?? "—";
         const estado = caso.simulado ? " (validado)" : "";
         return `<tr>
           <td>${caso.reporte_id}</td>
           <td>${caso.tipo ?? ""}</td>
           <td>${caso.es_plaga ? "sí" : "no"}</td>
           <td><code>${plaga}</code></td>
-          <td>${urgente}</td>
+          <td>${semaforo}</td>
+          <td>${tecnico}</td>
+          <td>${prioridad}</td>
           <td>${new Date(caso.registrado_en).toLocaleTimeString("es-MX", { hour12: false })}${estado}</td>
         </tr>`;
       }
@@ -63,7 +71,7 @@
           const e = datos.estadisticas;
           document.getElementById("tarjetas").innerHTML = [
             tarjeta("Casos registrados", e.registrados),
-            tarjeta("Avisos urgentes", e.urgentes),
+            tarjeta("Avisos al coordinador", e.avisos),
             tarjeta("Ciclos", e.ciclos),
             tarjeta("Pendientes", datos.pendientes),
           ].join("");
