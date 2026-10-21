@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, normalize, sep } from "node:path";
 import type { Config } from "../config.ts";
 import type { Estado } from "../estado.ts";
+import type { Supabase } from "../datos/supabase.ts";
 import { log } from "../logger.ts";
 
 const CARPETA_PUBLICA = join(dirname(fileURLToPath(import.meta.url)), "publico");
@@ -39,7 +40,7 @@ async function enviarArchivo(nombre: string, respuesta: ServerResponse): Promise
  * Panel web del equipo en el puerto 3000 (https://equipoNN.179-236-73-82.sslip.io).
  * Muestra los casos resueltos y el avance del sistema.
  */
-export function iniciarServidorWeb(config: Config, obtenerEstado: () => Estado): void {
+export function iniciarServidorWeb(config: Config, obtenerEstado: () => Estado, supabase: Supabase): void {
   const servidor = createServer((peticion, respuesta) => {
     void (async () => {
       const url = new URL(peticion.url ?? "/", "http://localhost");
@@ -62,6 +63,12 @@ export function iniciarServidorWeb(config: Config, obtenerEstado: () => Estado):
         return;
       }
 
+      if (ruta === "/api/historico") {
+        const casos = await supabase.leerCasos(200);
+        enviarJson(respuesta, 200, { configurado: supabase.configurado, tabla: supabase.tabla, casos });
+        return;
+      }
+
       if (ruta === "/api/plagas") {
         enviarJson(respuesta, 404, {
           error: "Pide el catálogo a la API del hackathon: GET /plagas con X-Equipo-Token.",
@@ -70,7 +77,11 @@ export function iniciarServidorWeb(config: Config, obtenerEstado: () => Estado):
       }
 
       const nombre = ruta === "/" ? "index.html" : ruta.replace(/^\/+/, "");
-      if (await enviarArchivo(nombre, respuesta)) return;
+      // Una ruta sin extensión (por ejemplo /historico) busca su .html.
+      const candidatos = nombre.includes(".") ? [nombre] : [`${nombre}.html`];
+      for (const candidato of candidatos) {
+        if (await enviarArchivo(candidato, respuesta)) return;
+      }
 
       respuesta.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
       respuesta.end("No encontrado");

@@ -5,6 +5,7 @@ import { cargarCatalogo } from "./catalogo.ts";
 import { cargarEstado } from "./estado.ts";
 import { esUrgente } from "./reglas.ts";
 import { Telegram } from "./telegram.ts";
+import { Supabase } from "./datos/supabase.ts";
 import { ejecutarCiclo, type Contexto } from "./bucle.ts";
 import { iniciarServidorWeb } from "./web/servidor.ts";
 
@@ -25,6 +26,7 @@ async function main(): Promise<void> {
   const cliente = new ClienteApi(config.apiUrl, token);
   const estado = await cargarEstado(config.rutaDatos);
   const telegram = new Telegram(config.telegramBotToken, config.telegramCoordinador, config.silencioTelegram);
+  const supabase = new Supabase(config.supabaseUrl, config.supabaseLlave, config.supabaseTabla);
 
   log.info(`API: ${config.apiUrl}`);
   try {
@@ -44,9 +46,12 @@ async function main(): Promise<void> {
   if (!telegram.configurado) {
     log.aviso("Telegram sin configurar (TELEGRAM_BOT_TOKEN / TELEGRAM_COORDINADOR_CHAT_ID): no habrá avisos.");
   }
+  if (!supabase.configurado) {
+    log.aviso("Supabase sin configurar: los casos solo quedarán en .data/estado.json.");
+  }
 
-  const ctx: Contexto = { config, cliente, catalogo, estado, telegram };
-  iniciarServidorWeb(config, () => ctx.estado);
+  const ctx: Contexto = { config, cliente, catalogo, estado, telegram, supabase };
+  iniciarServidorWeb(config, () => ctx.estado, supabase);
 
   let activo = true;
   const apagar = (): void => {

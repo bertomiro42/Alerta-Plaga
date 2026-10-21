@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alerta Plaga · Histórico en Supabase</title>
+    <link rel="stylesheet" href="/estilos.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Histórico en Supabase</h1>
+      <p>
+        Casos guardados en la tabla de la base de datos ·
+        <a href="/">volver al panel</a>
+      </p>
+    </header>
+
+    <section>
+      <p class="nota" id="nota">Cargando…</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Folio</th>
+            <th>Tipo</th>
+            <th>Productor</th>
+            <th>Parcela</th>
+            <th>¿Plaga?</th>
+            <th>Plaga</th>
+            <th>Urgente</th>
+            <th>Recibido</th>
+          </tr>
+        </thead>
+        <tbody id="filas"></tbody>
+      </table>
+    </section>
+
+    <script>
+      function fila(caso) {
+        const fecha = caso.recibido ? new Date(caso.recibido).toLocaleString("es-MX", { hour12: false }) : "—";
+        return `<tr>
+          <td>${caso.reporte_id}</td>
+          <td>${caso.tipo ?? ""}</td>
+          <td>${caso.productor_id ?? ""}</td>
+          <td>${caso.parcela_id ?? ""}</td>
+          <td>${caso.es_plaga ? "sí" : "no"}</td>
+          <td><code>${caso.plaga ?? "—"}</code></td>
+          <td>${caso.urgente ? '<span class="si">sí</span>' : '<span class="no">no</span>'}</td>
+          <td>${fecha}</td>
+        </tr>`;
+      }
+
+      async function actualizar() {
+        const nota = document.getElementById("nota");
+        try {
+          const respuesta = await fetch("/api/historico");
+          const datos = await respuesta.json();
+          if (!datos.configurado) {
+            nota.textContent = "Supabase no está configurado: define SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY en .env.";
+            return;
+          }
+          nota.textContent = `Tabla "${datos.tabla}" · ${datos.casos.length} casos · ${new Date().toLocaleTimeString("es-MX", { hour12: false })}`;
+          document.getElementById("filas").innerHTML = datos.casos.map(fila).join("");
+        } catch (error) {
+          nota.textContent = "No se pudo leer /api/historico: " + error;
+        }
+      }
+
+      actualizar();
+      setInterval(actualizar, 20000);
+    </script>
+  </body>
+</html>

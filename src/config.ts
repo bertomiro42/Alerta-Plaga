@@ -16,6 +16,9 @@ export type Config = {
   simulacion: boolean;
   silencioTelegram: boolean;
   rutaDatos: string;
+  supabaseUrl: string;
+  supabaseLlave: string;
+  supabaseTabla: string;
 };
 
 /** Error que se lanza cuando falta una variable de entorno obligatoria. */
@@ -72,5 +75,8 @@ export function cargarConfig(): Config {
     simulacion: booleano("SIMULACION", true),
     silencioTelegram: booleano("SILENCIO_TELEGRAM", false),
     rutaDatos: resolve(process.cwd(), texto("RUTA_DATOS", ".data")),
+    supabaseUrl: texto("SUPABASE_URL"),
+    supabaseLlave: texto("SUPABASE_PUBLISHABLE_KEY") || texto("SUPABASE_ANON_KEY"),
+    supabaseTabla: texto("SUPABASE_TABLA", "casos"),
   };
 }

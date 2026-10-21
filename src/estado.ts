@@ -7,6 +7,8 @@ export type CasoGuardado = Caso & {
   recibido: string | null;
   registrado_en: string;
   avisado: boolean;
+  /** Transcripción de la nota de voz, cuando la hubo. */
+  transcripcion?: string | null;
   /** true cuando solo se validó el formato (SIMULACION=true): no cuenta para el reto. */
   simulado?: boolean;
   respuesta: unknown;
@@ -28,6 +30,8 @@ export type Estado = {
   pendientes: Reporte[];
   /** Caché de la interpretación del agente, para no volver a llamar al modelo. */
   clasificaciones: Record<string, Clasificacion>;
+  /** Caché de las transcripciones de notas de voz. */
+  transcripciones: Record<string, string>;
   casos: CasoGuardado[];
   estadisticas: Estadisticas;
 };
@@ -38,6 +42,7 @@ export function estadoInicial(): Estado {
     procesados: [],
     pendientes: [],
     clasificaciones: {},
+    transcripciones: {},
     casos: [],
     estadisticas: { ciclos: 0, registrados: 0, urgentes: 0, errores: 0, ultimoCiclo: null },
   };
@@ -61,6 +66,10 @@ export async function cargarEstado(rutaDatos: string): Promise<Estado> {
       clasificaciones:
         typeof datos.clasificaciones === "object" && datos.clasificaciones !== null
           ? datos.clasificaciones
+          : {},
+      transcripciones:
+        typeof datos.transcripciones === "object" && datos.transcripciones !== null
+          ? datos.transcripciones
           : {},
       casos: Array.isArray(datos.casos) ? datos.casos : [],
       estadisticas: { ...inicial.estadisticas, ...(datos.estadisticas ?? {}) },

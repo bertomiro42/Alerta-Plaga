@@ -4,6 +4,7 @@ import { buscarPlaga } from "../catalogo.ts";
 import { log } from "../logger.ts";
 import { instruccionesSistema } from "./prompts.ts";
 import { completar, ErrorOpenRouter, type ParteContenido } from "./openrouter.ts";
+import { transcribir } from "./transcripcion.ts";
 
 export type OpcionesClasificador = {
   apiKey: string;
@@ -11,6 +12,8 @@ export type OpcionesClasificador = {
   modeloVision: string;
   modeloAudio: string;
   catalogo: Plaga[];
+  /** Caché de transcripciones, para no volver a transcribir la misma nota de voz. */
+  transcripciones?: Record<string, string>;
 };
 
 /** Extrae el primer objeto JSON que aparezca en un texto. */
@@ -43,12 +46,6 @@ function interpretarRespuesta(texto: string): Clasificacion | null {
   return { es_plaga: esPlaga, plaga, confianza, motivo };
 }
 
-function extension(ruta: string | null): string {
-  if (!ruta) return "ogg";
-  const coincide = ruta.match(/\.([a-z0-9]+)(?:\?|$)/i);
-  return coincide?.[1]?.toLowerCase() ?? "ogg";
-}
-
 function describir(reporte: Reporte, pie: string): string {
   const lineas = [`Tipo de mensaje: ${reporte.tipo}.`, `Folio: ${reporte.id}.`];
   if (reporte.respuesta_a) {
@@ -59,7 +56,7 @@ function describir(reporte: Reporte, pie: string): string {
   } else if (reporte.tipo === "foto") {
     lineas.push("La foto no trae pie de foto; interpreta la imagen.");
   } else if (reporte.tipo === "voz") {
-    lineas.push("Es una nota de voz; el audio va adjunto.");
+    lineas.push("El texto del productor es la transcripción de su nota de voz.");
   }
   lineas.push("Clasifica el mensaje y responde solo con el objeto JSON.");
   return lineas.join("\n");
@@ -67,6 +64,11 @@ function describir(reporte: Reporte, pie: string): string {
 
 /**
  * Interpreta un mensaje con el agente de IA.
+ *
+ * - Texto: se manda tal cual al modelo de texto.
+ * - Foto: se descarga y se manda como imagen al modelo con visión.
+ * - Voz: se transcribe primero y luego se clasifica el texto transcrito.
+ *
  * Devuelve null cuando no se pudo interpretar (por ejemplo, una nota de voz sin
  * transcriptor configurado): en ese caso NO se registra y se reintenta después.
  */
@@ -77,8 +79,13 @@ export async function clasificar(
 ): Promise<Clasificacion | null> {
   const pie = (reporte.texto ?? "").trim();
   const partes: ParteContenido[] = [];
+  let modelo = opciones.modelo;
 
-  if (reporte.tipo === "foto" && reporte.foto_url) {
+  if (reporte.tipo === "foto") {
+    if (!reporte.foto_url) {
+      log.aviso(`El reporte ${reporte.id} es una foto sin archivo; se reintentará.`);
+      return null;
+    }
     const media = await cliente.descargarMedia(reporte.foto_url);
     if (!media) {
       log.aviso(`El reporte ${reporte.id} no tiene foto descargable; se reintentará.`);
@@ -89,6 +96,7 @@ export async function clasificar(
       type: "image_url",
       image_url: { url: `data:${tipo};base64,${Buffer.from(media.datos).toString("base64")}` },
     });
+    modelo = opciones.modeloVision;
   }
 
   if (reporte.tipo === "voz") {
@@ -98,21 +106,17 @@ export async function clasificar(
       );
       return null;
     }
-    const media = await cliente.descargarMedia(reporte.audio_url);
-    if (!media) {
-      log.aviso(`El reporte ${reporte.id} no tiene audio descargable; se reintentará.`);
-      return null;
-    }
-    partes.push({
-      type: "input_audio",
-      input_audio: { data: Buffer.from(media.datos).toString("base64"), format: extension(reporte.audio_url) },
-    });
+    const transcripcion = await transcribir(
+      cliente,
+      { apiKey: opciones.apiKey, modelo: opciones.modeloAudio },
+      reporte,
+      opciones.transcripciones,
+    );
+    if (!transcripcion) return null;
+    partes.push({ type: "text", text: `Transcripción de la nota de voz:\n"""\n${transcripcion}\n"""` });
   }
 
   partes.push({ type: "text", text: describir(reporte, pie) });
-
-  const modelo =
-    reporte.tipo === "foto" ? opciones.modeloVision : reporte.tipo === "voz" ? opciones.modeloAudio : opciones.modelo;
 
   let respuesta: string;
   try {
@@ -126,7 +130,9 @@ export async function clasificar(
       { json: true },
     );
   } catch (error) {
-    log.error(`El agente falló con el reporte ${reporte.id}: ${error instanceof ErrorOpenRouter ? error.message : String(error)}`);
+    log.error(
+      `El agente falló con el reporte ${reporte.id}: ${error instanceof ErrorOpenRouter ? error.message : String(error)}`,
+    );
     return null;
   }
 

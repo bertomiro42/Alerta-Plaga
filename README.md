@@ -34,8 +34,10 @@ GET /reportes ──► agente de IA (OpenRouter) ──► regla de urgencia �
 | `src/catalogo.ts` | Normaliza `GET /plagas` y arma el texto para el agente. |
 | `src/api/cliente.ts` | Cliente de la API del hackathon. |
 | `src/agente/clasificador.ts` | Manda el mensaje al modelo y lee su JSON. |
+| `src/agente/transcripcion.ts` | Transcribe las notas de voz (y usa ffmpeg si hace falta). |
 | `src/agente/prompts.ts` | Instrucciones del agente (incluye defensa contra prompt injection). |
 | `src/agente/openrouter.ts` | Cliente mínimo de OpenRouter. |
+| `src/datos/supabase.ts` | Guarda los casos en Supabase por REST. |
 | `src/telegram.ts` | Avisos al coordinador. |
 | `src/estado.ts` | Guarda el avance y los casos en `.data/estado.json`. |
 | `src/web/` | Panel con los casos y la urgencia (puerto 3000). |
@@ -93,6 +95,43 @@ Al arrancar, el sistema publica un panel en el puerto 3000:
 - `/salud` — el avance del sistema.
 
 En el servidor del curso se ve en `https://equipoNN.179-236-73-82.sslip.io`.
+
+## Voz y fotos
+
+Casi la mitad de los mensajes no son texto, así que el sistema los trata distinto:
+
+- **Fotos:** se descargan de `GET /media/{archivo}` (no pide token) y se mandan al modelo con visión (`OPENROUTER_MODEL_VISION`) en base64. El pie de foto, si lo trae, va como texto aparte.
+- **Notas de voz:** se transcriben primero y luego se clasifica el texto transcrito con `OPENROUTER_MODEL`. Así el modelo de audio solo tiene que transcribir, que es lo que mejor hace.
+
+Las notas de voz de Telegram son `.ogg` (Opus) y OpenRouter acepta `ogg` en `input_audio`, pero **no todos los modelos aceptan todos los formatos**. Si el modelo rechaza el archivo, el sistema reintenta convirtiéndolo a `wav` con `ffmpeg` (si está instalado). Si no hay ni modelo de audio ni ffmpeg, el mensaje **queda pendiente** y se reintenta en el siguiente ciclo: nunca se registra una adivinanza.
+
+Para elegir el modelo de audio o de visión:
+
+```bash
+pnpm modelos
+```
+
+## Base de datos en Supabase
+
+Es opcional para el reto, pero ayuda a conservar los resultados y a mostrarlos. La tabla se llama `casos`:
+
+| Columna | Tipo | Notas |
+| --- | --- | --- |
+| `id` | bigint | automático |
+| `reporte_id` | text | único, el folio del mensaje |
+| `tipo`, `productor_id`, `parcela_id` | text | del mensaje |
+| `es_plaga` | boolean | lo que decidió el agente |
+| `plaga` | text | id del catálogo o `desconocida` |
+| `urgente` | boolean | lo que decidió la regla |
+| `confianza`, `motivo` | numeric, text | por qué lo decidió el agente |
+| `texto`, `transcripcion` | text | lo que dijo el productor |
+| `lat`, `lon`, `recibido`, `avisado` | | ubicación y tiempos |
+
+Tiene **RLS activado** con dos políticas: lectura pública y **solo inserción** pública (nada de `UPDATE` ni `DELETE` con la llave publicable). Por eso el sistema inserta una sola vez; si el caso ya estaba guardado, Supabase responde 409 y se da por bueno.
+
+Los casos se ven en `http://localhost:3000/historico`, o en tu link del servidor.
+
+La tabla `registros` de la bitácora del curso se dejó intacta: este sistema no la usa.
 
 ## Cómo se decide
 

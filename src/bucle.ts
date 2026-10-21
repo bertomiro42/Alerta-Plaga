@@ -1,6 +1,7 @@
 import type { Caso, Clasificacion, Plaga, Reporte } from "./tipos.ts";
 import type { ClienteApi } from "./api/cliente.ts";
 import type { Config } from "./config.ts";
+import type { Supabase } from "./datos/supabase.ts";
 import type { CasoGuardado, Estado } from "./estado.ts";
 import type { Telegram } from "./telegram.ts";
 import { clasificar } from "./agente/clasificador.ts";
@@ -15,6 +16,7 @@ export type Contexto = {
   catalogo: Plaga[];
   estado: Estado;
   telegram: Telegram;
+  supabase: Supabase;
 };
 
 export type ResumenCiclo = {
@@ -77,6 +79,7 @@ async function interpretarConCache(ctx: Contexto, reporte: Reporte): Promise<Cla
       modeloVision: ctx.config.modeloVision,
       modeloAudio: ctx.config.modeloAudio,
       catalogo: ctx.catalogo,
+      transcripciones: ctx.estado.transcripciones,
     },
     reporte,
   );
@@ -148,11 +151,14 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
     }
   }
 
+  const transcripcion = ctx.estado.transcripciones[reporte.id] ?? null;
+
   guardarEnPanel(ctx, {
     ...caso,
     recibido: reporte.recibido,
     registrado_en: new Date().toISOString(),
     avisado,
+    transcripcion,
     simulado: ctx.config.simulacion,
     respuesta,
   });
@@ -163,6 +169,28 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
 
   if (ctx.config.simulacion) return { resuelto: false, urgente };
   ctx.estado.estadisticas.registrados++;
+
+  // Copia en la base de datos. Va al final y nunca tumba el ciclo.
+  if (ctx.supabase.configurado) {
+    await ctx.supabase.guardarCaso({
+      reporte_id: reporte.id,
+      tipo: reporte.tipo,
+      productor_id: reporte.productor_id,
+      parcela_id: reporte.parcela_id,
+      es_plaga: caso.es_plaga,
+      plaga: caso.plaga ?? null,
+      urgente,
+      confianza: clasificacion.confianza,
+      motivo: clasificacion.motivo,
+      texto: reporte.texto,
+      transcripcion,
+      lat: reporte.lat,
+      lon: reporte.lon,
+      recibido: reporte.recibido,
+      avisado,
+    });
+  }
+
   return { resuelto: true, urgente };
 }
 
