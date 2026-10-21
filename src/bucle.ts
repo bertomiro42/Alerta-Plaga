@@ -46,7 +46,7 @@ function desdeParaConsulta(estado: Estado, config: Config): string {
 }
 
 /** Trae los mensajes nuevos, paginando con `desde`. */
-async function traerReportes(cliente: ClienteApi, desde: string): Promise<Reporte[]> {
+export async function traerReportes(cliente: ClienteApi, desde: string): Promise<Reporte[]> {
   const todos: Reporte[] = [];
   const vistos = new Set<string>();
   let cursor: string | null = desde;
