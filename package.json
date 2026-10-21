@@ -1,22 +1,23 @@
 {
-  "name": "bitacora-de-parcela",
-  "version": "1.0.0",
-  "description": "Formulario para registrar las actividades de una parcela en una tabla de Supabase.",
+  "name": "alerta-plaga",
+  "version": "0.1.0",
+  "description": "Sistema del reto «Alerta Plaga»: recibe los mensajes de los productores, los interpreta con IA, decide si son urgentes y avisa al coordinador por Telegram.",
   "private": true,
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "start": "node server.js"
-  },
   "engines": {
-    "node": ">=20.19"
+    "node": ">=22.6"
   },
-  "packageManager": "pnpm@11.5.0",
-  "dependencies": {
-    "@supabase/supabase-js": "^2.118.0"
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/index.ts",
+    "dev": "node --watch --env-file-if-exists=.env src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "plagas": "node --env-file-if-exists=.env src/scripts/ver-plagas.ts",
+    "probar": "node --env-file-if-exists=.env src/scripts/clasificar-uno.ts",
+    "modelos": "node --env-file-if-exists=.env src/scripts/listar-modelos.ts",
+    "telegram": "node --env-file-if-exists=.env src/scripts/probar-telegram.ts"
   },
   "devDependencies": {
-    "vite": "^8.3.4"
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0"
   }
 }

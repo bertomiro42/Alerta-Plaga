@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alerta Plaga · Panel</title>
+    <link rel="stylesheet" href="/estilos.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Alerta Plaga</h1>
+      <p>Junta local de sanidad vegetal · Panel del equipo</p>
+    </header>
+
+    <section class="tarjetas" id="tarjetas"></section>
+
+    <section>
+      <h2>Últimos casos</h2>
+      <p class="nota" id="nota"></p>
+      <table>
+        <thead>
+          <tr>
+            <th>Folio</th>
+            <th>Tipo</th>
+            <th>¿Plaga?</th>
+            <th>Plaga</th>
+            <th>Urgente</th>
+            <th>Registrado</th>
+          </tr>
+        </thead>
+        <tbody id="casos"></tbody>
+      </table>
+    </section>
+
+    <script>
+      const objetivo = "Actualizado: " + new Date().toLocaleTimeString("es-MX", { hour12: false });
+
+      function tarjeta(titulo, valor) {
+        return `<div class="tarjeta"><span class="valor">${valor}</span><span class="titulo">${titulo}</span></div>`;
+      }
+
+      function fila(caso) {
+        const urgente = caso.urgente ? '<span class="si">sí</span>' : '<span class="no">no</span>';
+        const plaga = caso.plaga ?? "—";
+        const estado = caso.simulado ? " (validado)" : "";
+        return `<tr>
+          <td>${caso.reporte_id}</td>
+          <td>${caso.tipo ?? ""}</td>
+          <td>${caso.es_plaga ? "sí" : "no"}</td>
+          <td><code>${plaga}</code></td>
+          <td>${urgente}</td>
+          <td>${new Date(caso.registrado_en).toLocaleTimeString("es-MX", { hour12: false })}${estado}</td>
+        </tr>`;
+      }
+
+      async function actualizar() {
+        try {
+          const respuesta = await fetch("/api/casos");
+          const datos = await respuesta.json();
+          const e = datos.estadisticas;
+          document.getElementById("tarjetas").innerHTML = [
+            tarjeta("Casos registrados", e.registrados),
+            tarjeta("Avisos urgentes", e.urgentes),
+            tarjeta("Ciclos", e.ciclos),
+            tarjeta("Pendientes", datos.pendientes),
+          ].join("");
+          document.getElementById("nota").textContent =
+            `Último mensaje visto: ${datos.ultimoDesde ?? "—"} · ${objetivo}`;
+          document.getElementById("casos").innerHTML = datos.casos.map(fila).join("");
+        } catch (error) {
+          document.getElementById("nota").textContent = "No se pudo leer /api/casos: " + error;
+        }
+      }
+
+      actualizar();
+      setInterval(actualizar, 15000);
+    </script>
+  </body>
+</html>

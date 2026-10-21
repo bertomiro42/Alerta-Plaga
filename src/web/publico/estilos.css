@@ -1,0 +1,111 @@
+:root {
+  --tinta: #1c1c1c;
+  --gris: #6b6b6b;
+  --linea: #e2e2e2;
+  --fondo: #fafafa;
+  --aviso: #b3261e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0 auto;
+  max-width: 1000px;
+  padding: 2rem 1.25rem 4rem;
+  background: var(--fondo);
+  color: var(--tinta);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.5;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+}
+
+header p {
+  margin: 0.25rem 0 2rem;
+  color: var(--gris);
+}
+
+.tarjetas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+}
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.tarjeta .valor {
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+.tarjeta .titulo {
+  color: var(--gris);
+  font-size: 0.85rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin-bottom: 0.25rem;
+}
+
+.nota {
+  margin-top: 0;
+  color: var(--gris);
+  font-size: 0.85rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+th,
+td {
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--linea);
+  font-size: 0.9rem;
+}
+
+th {
+  background: #f2f2f2;
+  font-weight: 600;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+code {
+  background: #f2f2f2;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+.si {
+  color: var(--aviso);
+  font-weight: 600;
+}
+
+.no {
+  color: var(--gris);
+}

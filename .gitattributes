@@ -1,0 +1,7 @@
+# Mantiene los finales de línea consistentes entre los integrantes
+# (Windows, macOS o Linux) para que los diffs no se llenen de ruido.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ogg binary
+*.ico binary

@@ -1,4 +1,18 @@
+# Dependencias
 node_modules/
+
+# Compilados
 dist/
+
+# Llaves y secretos: nunca al repositorio
 .env
+.env.*
+!.env.example
+
+# Datos locales (estado, casos registrados, medios descargados)
+.data/
+*.log
+
+# Sistema
 .DS_Store
+Thumbs.db
