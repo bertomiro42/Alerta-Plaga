@@ -55,11 +55,22 @@ function archivoEstado(rutaDatos: string): string {
   return join(rutaDatos, "estado.json");
 }
 
+/** Deja las estadísticas con las claves actuales (descarta las viejas del estado guardado). */
+function estadisticasDe(datos: Partial<Estadisticas> | undefined): Estadisticas {
+  if (!datos || typeof datos !== "object") return estadoInicial().estadisticas;
+  return {
+    ciclos: typeof datos.ciclos === "number" ? datos.ciclos : 0,
+    registrados: typeof datos.registrados === "number" ? datos.registrados : 0,
+    avisos: typeof datos.avisos === "number" ? datos.avisos : 0,
+    errores: typeof datos.errores === "number" ? datos.errores : 0,
+    ultimoCiclo: typeof datos.ultimoCiclo === "string" ? datos.ultimoCiclo : null,
+  };
+}
+
 export async function cargarEstado(rutaDatos: string): Promise<Estado> {
   try {
     const contenido = await readFile(archivoEstado(rutaDatos), "utf8");
     const datos = JSON.parse(contenido) as Partial<Estado>;
-    const inicial = estadoInicial();
     return {
       ultimoDesde: typeof datos.ultimoDesde === "string" ? datos.ultimoDesde : null,
       procesados: Array.isArray(datos.procesados)
@@ -75,7 +86,7 @@ export async function cargarEstado(rutaDatos: string): Promise<Estado> {
           ? datos.transcripciones
           : {},
       casos: Array.isArray(datos.casos) ? datos.casos : [],
-      estadisticas: { ...inicial.estadisticas, ...(datos.estadisticas ?? {}) },
+      estadisticas: estadisticasDe(datos.estadisticas),
     };
   } catch {
     return estadoInicial();

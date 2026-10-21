@@ -4,22 +4,23 @@ Sistema del reto **«Alerta Plaga»** (IT Green × DIMA, Universidad Autónoma C
 
 > **Pregunta del reto:** ¿cómo lograr que el aviso de un productor se reciba, se interprete y se atienda antes de que la plaga se extienda?
 
-El sistema consulta cada minuto los mensajes que los productores mandan (texto, nota de voz y foto), decide con un **agente de IA** si es un reporte de plaga y de qué plaga se trata, aplica una **regla en código** para saber si es urgente, **avisa al coordinador por Telegram** y **registra el resultado** en la API del hackathon.
+El sistema consulta cada minuto los mensajes que los productores mandan (texto, nota de voz y foto). Un **agente de IA** decide si es un reporte de plaga, de qué plaga se trata y qué porcentaje de la parcela está afectado. Luego **reglas en código** (sin IA) calculan la **prioridad** y el **semáforo** y eligen al **técnico**, y si el semáforo es rojo o naranja se avisa al coordinador por Telegram. El resultado se registra en la API del hackathon.
 
 ## Flujo
 
 ```
-GET /reportes ──► agente de IA (OpenRouter) ──► regla de urgencia ──► Telegram (coordinador)
-                        │                              │
-                        └──────────► POST /casos ◄─────┘   (una sola vez por mensaje)
+GET /reportes ──► agente de IA ──► reglas (prioridad, semáforo, técnico) ──► Telegram (coordinador)
+   (texto, voz,    (plaga, pct)              │
+    foto)                                     ├─► POST /casos  (una sola vez)
+                                              └─► POST /avisos (buzón de la junta)
 ```
 
 | Paso | Dónde |
 | --- | --- |
 | Recibir los mensajes nuevos | `src/bucle.ts` + `src/api/cliente.ts` |
-| Interpretar con IA | `src/agente/` |
-| Decidir la urgencia (sin IA) | `src/reglas.ts` |
-| Avisar al coordinador | `src/telegram.ts` |
+| Interpretar con IA (plaga y porcentaje) | `src/agente/` |
+| Prioridad, semáforo y técnico (sin IA) | `src/dominio/` |
+| Avisar al coordinador | `src/telegram.ts` + `POST /avisos` |
 | Registrar el resultado | `src/bucle.ts` → `POST /casos` |
 | Panel web | `src/web/` |
 
@@ -30,7 +31,9 @@ GET /reportes ──► agente de IA (OpenRouter) ──► regla de urgencia �
 | `src/index.ts` | Arranca el bucle y el panel web. |
 | `src/config.ts` | Lee y valida las variables de `.env`. |
 | `src/bucle.ts` | Un ciclo completo: recibir → interpretar → decidir → avisar → registrar. |
-| `src/reglas.ts` | La regla de urgencia, en código y sin IA. |
+| `src/dominio/prioridad.ts` | Prioridad y semáforo (fórmulas del reto, sin IA). |
+| `src/dominio/tecnico.ts` | Elección del técnico (especialidad, carga y distancia). |
+| `src/dominio/geo.ts` | Distancia con haversine (R = 6371 km). |
 | `src/catalogo.ts` | Normaliza `GET /plagas` y arma el texto para el agente. |
 | `src/api/cliente.ts` | Cliente de la API del hackathon. |
 | `src/agente/clasificador.ts` | Manda el mensaje al modelo y lee su JSON. |
@@ -40,8 +43,8 @@ GET /reportes ──► agente de IA (OpenRouter) ──► regla de urgencia �
 | `src/datos/supabase.ts` | Guarda los casos en Supabase por REST. |
 | `src/telegram.ts` | Avisos al coordinador. |
 | `src/estado.ts` | Guarda el avance y los casos en `.data/estado.json`. |
-| `src/web/` | Panel con los casos y la urgencia (puerto 3000). |
-| `src/scripts/` | Utilidades: ver el catálogo, probar el agente, listar modelos. |
+| `src/web/` | Panel con los casos, el semáforo y el técnico (puerto 3000). |
+| `src/scripts/` | Utilidades: catálogo, probar el agente, validar reglas y complementar. |
 
 Sin dependencias de ejecución: usa `fetch`, `--env-file` y el soporte de TypeScript de Node 22.6+. `typescript` solo se usa para revisar tipos.
 
@@ -62,7 +65,8 @@ cp .env.example .env      # en Windows: copy .env.example .env
 Escribe en `.env` el token del equipo, la llave de OpenRouter y los datos del bot. Luego:
 
 ```bash
-pnpm plagas     # imprime el catálogo y qué plagas son urgentes por la regla
+pnpm plagas     # imprime el catálogo con especialidad, etapas y puntos de severidad
+pnpm reglas     # valida prioridad, semáforo y técnico contra GET /casos-previos
 pnpm modelos    # lista los modelos de OpenRouter con visión y audio
 pnpm probar -- --texto "se están comiendo el cogollo del maíz"
 pnpm telegram   # manda un aviso de prueba al coordinador
@@ -134,11 +138,67 @@ Los casos se ven en `http://localhost:3000/historico`, o en tu link del servidor
 
 La tabla `registros` de la bitácora del curso se dejó intacta: este sistema no la usa.
 
+## Nivel 2: semáforo y técnico
+
+Desde el martes por la noche, cada caso lleva **semáforo** y **técnico**, y el agente además extrae **qué porcentaje de la parcela** está afectado.
+
+### Prioridad (0 a 100)
+
+**Prioridad = severidad + superficie + etapa**
+
+| Factor | Cómo se calcula | Puntos |
+| --- | --- | --- |
+| Severidad | del catálogo: baja 15 · media 25 · alta 40 · crítica 50 | hasta 50 |
+| Superficie | `ha afectadas = superficie_ha × pct / 100`; `min(25, redondear(ha / 4 × 25))` | hasta 25 |
+| Etapa | crítica para esa plaga y ese cultivo 25 · susceptible 15 · otra 5 | hasta 25 |
+
+- El redondeo es comercial (0.5 sube, 14.06 → 14 y 14.5 → 15).
+- Una plaga **cuarentenaria** da prioridad **100** sin hacer el cálculo.
+- El `pct` lo dice el productor; **si no lo dice, se usa 10 %**.
+
+| Semáforo | Prioridad | Visita a más tardar |
+| --- | --- | --- |
+| Rojo | 85–100 | 24 h |
+| Naranja | 70–84 | 48 h |
+| Amarillo | 40–69 | 72 h |
+| Verde | 0–39 | 7 días |
+
+### Técnico
+
+1. Solo de la **especialidad** de la plaga (`entomologia` o `fitopatologia`, viene en el catálogo).
+2. Solo los de **carga menor a 5**, consultados con la hora `recibido` del mensaje: `GET /tecnicos?momento=<recibido>`.
+3. De ellos, el **más cercano** a la parcela desde su base, con **haversine** (R = 6371 km).
+4. Empates al metro: menor carga y, después, menor `id`.
+5. Si nadie cumple, `tecnico_id: null`.
+
+### Cómo se probaron las reglas
+
+`GET /casos-previos` trae 40 casos de la semana pasada con su prioridad, su semáforo y su técnico correctos:
+
+```bash
+pnpm reglas
+```
+
+Nuestras reglas dan **40/40 en prioridad, 40/40 en semáforo y 40/40 en técnico**.
+
+### Completar lo registrado antes del Nivel 2
+
+Los casos ya registrados se pueden mandar **una sola vez** otra vez con `semaforo` y `tecnico_id`:
+
+```bash
+pnpm complementar -- --simular   # revisa sin mandar nada
+pnpm complementar                # lo manda y recuerda lo hecho en .data/complementados.json
+```
+
+### Seguimientos
+
+Los **seguimientos** («¿ya vieron lo del gusano?», «sigue igual») sí son reportes de plaga, pero **no abren un caso nuevo**: su semáforo y su técnico no se califican.
+
 ## Cómo se decide
 
 - **¿Es reporte de plaga?** Lo decide el agente: describe un problema en el cultivo (también los seguimientos). Saludos, precios, trámites o fotos de otra cosa no lo son.
 - **¿Qué plaga?** Siempre un `id` del catálogo de `GET /plagas`. Si no se puede saber, `"desconocida"` (no resta). El código nunca inventa un id: si el modelo propone uno que no existe, se registra `"desconocida"`.
-- **¿Es urgente?** Lo decide la regla de `src/reglas.ts`, sin IA: la plaga es **cuarentenaria** o de **severidad alta o crítica**.
+- **¿Es urgente?** Lo decide la regla de `src/dominio/prioridad.ts`, sin IA: se calcula la prioridad (severidad + superficie + etapa) y el semáforo. Se avisa al coordinador solo si es **rojo o naranja**.
 - **Seguridad:** el texto del productor se le entrega al agente como datos, no como instrucciones; los mensajes que intentan manipular se clasifican por lo que realmente dicen.
 
 ## Notas del repositorio
