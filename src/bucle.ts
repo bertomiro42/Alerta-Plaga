@@ -139,6 +139,8 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
     }
   }
 
+  const transcripcion = ctx.estado.transcripciones[reporte.id] ?? null;
+
   let avisado = false;
   if (urgente) {
     if (ctx.config.simulacion) {
@@ -152,15 +154,35 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
         plaga: caso.plaga ?? "desconocida",
         nombrePlaga: plaga?.nombre ?? "desconocida",
         motivo,
-        texto: reporte.texto ?? "",
+        texto: reporte.texto ?? transcripcion ?? "",
         lat: reporte.lat,
         lon: reporte.lon,
       });
-      if (avisado) ctx.estado.estadisticas.urgentes++;
+
+      // Además del Telegram, se deja constancia en el buzón de la API (POST /avisos):
+      // así lo ve la junta y la tabla de posiciones cuenta los avisos.
+      const resumen = (reporte.texto ?? transcripcion ?? "").replace(/\s+/g, " ").slice(0, 300);
+      try {
+        await ctx.cliente.enviarAviso({
+          reporte_id: reporte.id,
+          tipo: plaga?.cuarentenaria ? "cuarentenaria" : "escalamiento",
+          para: "coordinador",
+          mensaje:
+            `Aviso urgente de plaga: ${plaga?.nombre ?? "desconocida"} (${caso.plaga ?? "desconocida"}). ` +
+            `Motivo: ${motivo}. Productor: ${reporte.productor_id ?? "sin dato"} · Parcela: ${reporte.parcela_id ?? "sin dato"}.` +
+            (resumen ? ` Mensaje: «${resumen}»` : ""),
+        });
+      } catch (error) {
+        log.error(
+          `No se pudo enviar el aviso de ${reporte.id} al buzón de la API: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+
+      ctx.estado.estadisticas.urgentes++;
     }
   }
-
-  const transcripcion = ctx.estado.transcripciones[reporte.id] ?? null;
 
   guardarEnPanel(ctx, {
     ...caso,

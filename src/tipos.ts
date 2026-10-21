@@ -41,6 +41,16 @@ export type Caso = {
   caso?: string | null;
 };
 
+export type TipoAviso = "folio" | "asignacion" | "brote" | "cuarentenaria" | "escalamiento" | "respuesta";
+
+/** Un aviso al buzón de la API (POST /avisos): así lo ve la junta. */
+export type Aviso = {
+  reporte_id: string;
+  tipo: TipoAviso;
+  para: string | string[];
+  mensaje: string;
+};
+
 /** Lo que devuelve el agente de IA para un mensaje. */
 export type Clasificacion = {
   es_plaga: boolean;

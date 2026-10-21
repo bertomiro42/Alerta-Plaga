@@ -1,4 +1,4 @@
-import type { Caso, Reporte } from "../tipos.ts";
+import type { Aviso, Caso, Reporte } from "../tipos.ts";
 
 /** Error de comunicación con la API del hackathon. */
 export class ErrorApi extends Error {
@@ -87,6 +87,11 @@ export class ClienteApi {
   /** Registra el resultado. ¡Una sola vez por mensaje! */
   registrarCaso(caso: Caso): Promise<unknown> {
     return this.pedir("POST", "/casos", caso);
+  }
+
+  /** Manda un aviso al buzón de la API (para el coordinador, un técnico, etc.). */
+  enviarAviso(aviso: Aviso): Promise<unknown> {
+    return this.pedir("POST", "/avisos", aviso);
   }
 
   equipo(): Promise<unknown> {
