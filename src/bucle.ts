@@ -156,6 +156,8 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
 
   guardarEnPanel(ctx, {
     ...caso,
+    tipo: reporte.tipo,
+    motivo: clasificacion.motivo,
     recibido: reporte.recibido,
     registrado_en: new Date().toISOString(),
     avisado,

@@ -4,6 +4,8 @@ import type { Caso, Clasificacion, Reporte } from "./tipos.ts";
 
 /** Un caso ya resuelto, con lo que sabemos del mensaje y lo que respondió la API. */
 export type CasoGuardado = Caso & {
+  tipo?: string | null;
+  motivo?: string | null;
   recibido: string | null;
   registrado_en: string;
   avisado: boolean;
