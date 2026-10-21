@@ -166,6 +166,7 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
     ...caso,
     tipo: reporte.tipo,
     motivo: clasificacion.motivo,
+    texto: reporte.texto,
     recibido: reporte.recibido,
     registrado_en: new Date().toISOString(),
     avisado,

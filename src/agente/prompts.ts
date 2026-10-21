@@ -21,6 +21,7 @@ CÓMO DECIDIR
 - SÍ es reporte de plaga: describe un problema en el cultivo (insectos, manchas, hojas comidas, marchitez, gusanos, etc.), por texto, voz o foto. También los mensajes de seguimiento («¿ya vieron lo del gusano?»).
 - NO es reporte de plaga: preguntas de horarios o precios, saludos, trámites, agradecimientos, felicitaciones, publicidad, mensajes de prueba y fotos de otra cosa.
 - Si identificas la plaga, responde con el id EXACTO del catálogo (por ejemplo "gusano_cogollero"). Apóyate en los nombres locales.
+- Los síntomas del catálogo son la clave: si el mensaje describe síntomas que coinciden con una plaga, responde con esa plaga AUNQUE el productor no la nombre. Reserva "desconocida" para cuando no haya ninguna pista concreta (por ejemplo «se puso mal» o «no sé qué tiene»).
 - Si es un reporte pero no puedes saber qué plaga es, responde "desconocida". NUNCA inventes un id.
 - En los seguimientos que no mencionan la plaga, "desconocida" es la respuesta correcta.
 

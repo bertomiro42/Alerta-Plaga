@@ -6,6 +6,7 @@ import type { Caso, Clasificacion, Reporte } from "./tipos.ts";
 export type CasoGuardado = Caso & {
   tipo?: string | null;
   motivo?: string | null;
+  texto?: string | null;
   recibido: string | null;
   registrado_en: string;
   avisado: boolean;
