@@ -4,6 +4,7 @@ import type { Config } from "./config.ts";
 import type { Supabase } from "./datos/supabase.ts";
 import type { CasoGuardado, Estado } from "./estado.ts";
 import type { Telegram } from "./telegram.ts";
+import type { Aprobaciones } from "./aprobaciones.ts";
 import { clasificar } from "./agente/clasificador.ts";
 import { buscarPlaga } from "./catalogo.ts";
 import { calcularPrioridad, detallePrioridad, PCT_POR_DEFECTO, semaforoDePrioridad } from "./dominio/prioridad.ts";
@@ -19,6 +20,7 @@ export type Contexto = {
   parcelas: Map<string, Parcela>;
   estado: Estado;
   telegram: Telegram;
+  aprobaciones: Aprobaciones;
   supabase: Supabase;
   /** Caché de técnicos por momento, para no repetir consultas. */
   cacheTecnicos: Map<string, Tecnico[]>;
@@ -205,27 +207,30 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
     if (ctx.config.simulacion) {
       log.aviso(`[simulación] Se avisaría al coordinador por ${reporte.id}: semáforo ${decision.semaforo}`);
     } else {
-      avisado = await ctx.telegram.avisarCaso({
+      const texto = reporte.texto ?? transcripcion ?? "";
+      avisado = await ctx.aprobaciones.solicitar({
         reporteId: reporte.id,
+        recibido: reporte.recibido,
         semaforo: decision.semaforo,
         plaga: caso.plaga ?? "desconocida",
         nombrePlaga: plaga?.nombre ?? "desconocida",
+        prioridad: decision.prioridad,
         motivo: decision.detalle,
         tecnicoId: decision.tecnicoId,
         productor: reporte.productor_id,
         parcela: reporte.parcela_id,
-        texto: reporte.texto ?? transcripcion ?? "",
+        texto,
         lat: reporte.lat,
         lon: reporte.lon,
       });
 
       // Además del Telegram, se deja constancia en el buzón de la API (POST /avisos):
       // así lo ve la junta y la tabla de posiciones cuenta los avisos.
-      const resumen = (reporte.texto ?? transcripcion ?? "").replace(/\s+/g, " ").slice(0, 300);
+      const resumen = texto.replace(/\s+/g, " ").slice(0, 300);
       try {
         await ctx.cliente.enviarAviso({
           reporte_id: reporte.id,
-          tipo: plaga?.cuarentenaria ? "cuarentenaria" : "escalamiento",
+          tipo: "escalamiento",
           para: "coordinador",
           mensaje:
             `Caso ${decision.semaforo} de plaga: ${plaga?.nombre ?? "desconocida"} (${caso.plaga ?? "desconocida"}). ` +
@@ -239,6 +244,22 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
             error instanceof Error ? error.message : String(error)
           }`,
         );
+      }
+
+      // Plaga cuarentenaria: aviso inmediato a sanidad vegetal (sección 11).
+      if (plaga?.cuarentenaria) {
+        try {
+          await ctx.cliente.enviarAviso({
+            reporte_id: reporte.id,
+            tipo: "cuarentenaria",
+            para: "sanidad_vegetal",
+            mensaje:
+              `Plaga cuarentenaria: ${plaga.nombre} (${plaga.id}), semáforo ${decision.semaforo}, prioridad ${decision.prioridad ?? "?"}. ` +
+              `Parcela ${reporte.parcela_id ?? "sin identificar"}, productor ${reporte.productor_id ?? "sin dato"}. Folio ${reporte.id}.`,
+          });
+        } catch (error) {
+          log.error(`No se pudo avisar a sanidad vegetal por ${reporte.id}: ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
 
       ctx.estado.estadisticas.avisos++;

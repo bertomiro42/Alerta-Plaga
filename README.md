@@ -201,6 +201,17 @@ Los **seguimientos** («¿ya vieron lo del gusano?», «sigue igual») sí son r
 - **¿Es urgente?** Lo decide la regla de `src/dominio/prioridad.ts`, sin IA: se calcula la prioridad (severidad + superficie + etapa) y el semáforo. Se avisa al coordinador solo si es **rojo o naranja**.
 - **Seguridad:** el texto del productor se le entrega al agente como datos, no como instrucciones; los mensajes que intentan manipular se clasifican por lo que realmente dicen.
 
+## Aprobación del coordinador y avisos
+
+Cuando un caso sale **rojo o naranja**:
+
+1. El bot manda al coordinador el caso con su **plaga, parcela, prioridad y técnico**, con dos botones: **✅ Aprobar** y **🔁 Cambiar técnico**.
+2. Al aprobar, se avisa **al productor su folio** (`POST /avisos`, `tipo: folio`) y **al técnico su caso** (`tipo: asignacion`). Si el coordinador cambió de técnico, se avisa al elegido.
+3. En todos los casos rojo/naranja queda constancia en el buzón de la junta (`tipo: escalamiento`, `para: coordinador`).
+4. Si la plaga es **cuarentenaria**, además se avisa de inmediato a **sanidad vegetal** (`tipo: cuarentenaria`, `para: sanidad_vegetal`).
+
+Las aprobaciones pendientes se guardan en `.data/aprobaciones.json`, así que sobreviven a un reinicio del servidor.
+
 ## Notas del repositorio
 
 - `.env` está en `.gitignore`: ninguna llave, token ni contraseña se sube al repositorio.

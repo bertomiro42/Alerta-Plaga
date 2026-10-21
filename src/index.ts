@@ -5,6 +5,7 @@ import { cargarCatalogo } from "./catalogo.ts";
 import type { Parcela } from "./tipos.ts";
 import { cargarEstado } from "./estado.ts";
 import { Telegram } from "./telegram.ts";
+import { crearAprobaciones } from "./aprobaciones.ts";
 import { Supabase } from "./datos/supabase.ts";
 import { ejecutarCiclo, type Contexto } from "./bucle.ts";
 import { iniciarServidorWeb } from "./web/servidor.ts";
@@ -27,6 +28,8 @@ async function main(): Promise<void> {
   const estado = await cargarEstado(config.rutaDatos);
   const telegram = new Telegram(config.telegramBotToken, config.telegramCoordinador, config.silencioTelegram);
   const supabase = new Supabase(config.supabaseUrl, config.supabaseLlave, config.supabaseTabla);
+  const aprobaciones = crearAprobaciones(telegram, cliente, config.rutaDatos);
+  await aprobaciones.cargar();
 
   log.info(`API: ${config.apiUrl}`);
   try {
@@ -55,6 +58,8 @@ async function main(): Promise<void> {
   }
   if (!telegram.configurado) {
     log.aviso("Telegram sin configurar (TELEGRAM_BOT_TOKEN / TELEGRAM_COORDINADOR_CHAT_ID): no habrá avisos.");
+  } else {
+    log.info("Telegram configurado: los casos rojo y naranja pedirán aprobación al coordinador.");
   }
   if (!supabase.configurado) {
     log.aviso("Supabase sin configurar: los casos solo quedarán en .data/estado.json.");
@@ -67,10 +72,12 @@ async function main(): Promise<void> {
     parcelas,
     estado,
     telegram,
+    aprobaciones,
     supabase,
     cacheTecnicos: new Map(),
   };
   iniciarServidorWeb(config, () => ctx.estado, supabase);
+  aprobaciones.iniciar();
 
   let activo = true;
   const apagar = (): void => {

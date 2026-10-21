@@ -15,6 +15,7 @@ const enviado = await telegram.avisarCaso({
   plaga: "gusano_cogollero",
   nombrePlaga: "Gusano cogollero — mensaje de prueba",
   motivo: "severidad alta 40 + superficie 25 + etapa 25",
+  prioridad: 90,
   tecnicoId: "T-02",
   productor: "PR-000",
   parcela: "P-000 (prueba)",
