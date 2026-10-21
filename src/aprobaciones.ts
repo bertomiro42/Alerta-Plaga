@@ -22,7 +22,7 @@ export type Aprobacion = {
   tecnicoFinal: string | null;
 };
 
-type ContenidoArchivo = { offset: number; pendientes: Aprobacion[] };
+type ContenidoArchivo = Aprobacion[];
 
 function dormir(ms: number): Promise<void> {
   return new Promise((resolver) => setTimeout(resolver, ms));
@@ -47,17 +47,17 @@ export function crearAprobaciones(telegram: Telegram, cliente: ClienteApi, rutaD
   async function guardar(): Promise<void> {
     try {
       await mkdir(dirname(archivo), { recursive: true });
-      await writeFile(archivo, JSON.stringify({ offset, pendientes: [...pendientes.values()] }, null, 2), "utf8");
+      await writeFile(archivo, JSON.stringify([...pendientes.values()], null, 2), "utf8");
     } catch (error) {
       log.aviso(`No se pudieron guardar las aprobaciones: ${String(error)}`);
     }
   }
 
+  /** Lee las aprobaciones del archivo: se usa al arrancar y si llega un callback desconocido. */
   async function cargar(): Promise<void> {
     try {
-      const datos = JSON.parse(await readFile(archivo, "utf8")) as Partial<ContenidoArchivo>;
-      offset = typeof datos.offset === "number" ? datos.offset : 0;
-      for (const aprobacion of datos.pendientes ?? []) pendientes.set(aprobacion.reporteId, aprobacion);
+      const datos = JSON.parse(await readFile(archivo, "utf8")) as ContenidoArchivo;
+      for (const aprobacion of datos) pendientes.set(aprobacion.reporteId, aprobacion);
     } catch {
       // Todavía no hay archivo: es normal en el primer arranque.
     }
@@ -163,7 +163,13 @@ export function crearAprobaciones(telegram: Telegram, cliente: ClienteApi, rutaD
 
   async function manejarCallback(callbackId: string, dato: string): Promise<void> {
     const [accion = "", reporteId = "", extra = ""] = dato.split("|");
-    const aprobacion = pendientes.get(reporteId);
+    let aprobacion = pendientes.get(reporteId);
+
+    // Puede haberla mandado otro proceso (por ejemplo, el script de avisos manuales).
+    if (!aprobacion) {
+      await cargar();
+      aprobacion = pendientes.get(reporteId);
+    }
 
     if (!aprobacion) {
       await telegram.responderCallback(callbackId, "Ese caso ya no está pendiente.");
@@ -217,8 +223,7 @@ export function crearAprobaciones(telegram: Telegram, cliente: ClienteApi, rutaD
       } catch (error) {
         log.aviso(`Error en la escucha de aprobaciones: ${String(error)}`);
         await dormir(5_000);
-      }
-    }
+      }    }
   }
 
   function iniciar(): void {

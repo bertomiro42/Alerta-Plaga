@@ -116,7 +116,7 @@ export type Decision = {
 };
 
 /** Aplica las reglas del reto: prioridad, semáforo y técnico. Nada de IA. */
-async function decidir(
+export async function decidir(
   ctx: Contexto,
   reporte: Reporte,
   plaga: Plaga | undefined,
