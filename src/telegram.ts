@@ -1,7 +1,10 @@
 import { log } from "./logger.ts";
 
-export function escaparHtml(texto: string): string {
-  return texto.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+export function escaparHtml(texto: string | null | undefined): string {
+  return String(texto ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 /** Envía avisos al coordinador por el bot de Telegram. */

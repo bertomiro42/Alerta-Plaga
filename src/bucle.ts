@@ -4,6 +4,7 @@ import type { Config } from "./config.ts";
 import type { Supabase } from "./datos/supabase.ts";
 import type { CasoGuardado, Estado } from "./estado.ts";
 import type { Telegram } from "./telegram.ts";
+import { ErrorApi } from "./api/cliente.ts";
 import { clasificar } from "./agente/clasificador.ts";
 import { buscarPlaga } from "./catalogo.ts";
 import { esUrgente, explicarUrgencia } from "./reglas.ts";
@@ -123,12 +124,19 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
       ? await ctx.cliente.validarCaso(caso)
       : await ctx.cliente.registrarCaso(caso);
   } catch (error) {
-    log.error(
-      `No se pudo ${ctx.config.simulacion ? "validar" : "registrar"} el reporte ${reporte.id}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-    return { resuelto: false, urgente };
+    // 409 = este reporte ya se había registrado (por ejemplo tras un fallo parcial
+    // más adelante en el proceso). Cuenta el primer envío, así que se da por bueno.
+    if (!ctx.config.simulacion && error instanceof ErrorApi && error.estadoHttp === 409) {
+      log.info(`El reporte ${reporte.id} ya estaba registrado; se da por bueno.`);
+      respuesta = { ya_registrado: true };
+    } else {
+      log.error(
+        `No se pudo ${ctx.config.simulacion ? "validar" : "registrar"} el reporte ${reporte.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return { resuelto: false, urgente };
+    }
   }
 
   let avisado = false;
