@@ -547,8 +547,7 @@ export async function revisarPlazos(ctx: Contexto): Promise<number> {
 
   for (const caso of candidatos) {
     if (visitados.has(caso.reporte_id)) {
-      // Ya la atendieron: no hay nada que escalar.
-      caso.escalado = true;
+      // Ya la atendieron: no hay nada que escalar (se revisa cada ciclo, es barato).
       continue;
     }
     if (escalados >= MAX_ESCALADOS_POR_CICLO) break;

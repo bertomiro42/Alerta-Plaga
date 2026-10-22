@@ -35,6 +35,7 @@ GET /reportes ──► agente de IA ──► reglas (prioridad, semáforo, té
 | `src/dominio/tecnico.ts` | Elección del técnico (especialidad, carga y distancia). |
 | `src/dominio/brote.ts` | Detección de brotes (3 casos, 5 km, 168 h). |
 | `src/dominio/vecinos.ts` | Vecinos a avisar cuando hay brote (mismo cultivo, 5 km). |
+| `src/dominio/plazos.ts` | Plazos por semáforo y escalamiento de los vencidos. |
 | `src/dominio/geo.ts` | Distancia con haversine (R = 6371 km). |
 | `src/catalogo.ts` | Normaliza `GET /plagas` y arma el texto para el agente. |
 | `src/api/cliente.ts` | Cliente de la API del hackathon. |
@@ -217,6 +218,14 @@ El sistema intenta ubicarla: la parcela única del productor, la que se mencione
 
 Cuando el productor contesta, se registra **con el folio original** y la respuesta no se registra aparte, como indican las reglas (sección 6). Las preguntas quedan en el estado, así que un reinicio no las pierde.
 
+### Plazos y escalamiento
+
+Cada semáforo tiene un plazo para la visita: **rojo 24 h · naranja 48 h · amarillo 72 h · verde 7 días**. Una vez por ciclo, el sistema revisa `GET /visitas`: si un caso se pasó de su plazo y **no tiene visita**, lo **escala al coordinador** (`POST /avisos`, `tipo: escalamiento`) una sola vez. Se escalan como máximo 20 por ciclo, para no mandar cien avisos de golpe.
+
+```bash
+pnpm plazos   # lista el estado de los plazos (solo lectura)
+```
+
 ### Reintentar las plagas sin identificar
 
 ```bash
@@ -279,6 +288,7 @@ El código se escribió con un agente de IA como copiloto (las reglas lo permite
 | `pnpm avisar -- --reporte RX` | Reenviar el aviso con botones y a los vecinos | 2 vecinos en R-2124 |
 | `pnpm complementar -- --simular` | Completar lo registrado y reconstruir el historial | 88 casos, +74 y +81 puntos |
 | `pnpm reintentar -- --simular` | Reintentar plagas sin identificar | 2 de 15 con pistas |
+| `pnpm plazos` | Estado de los plazos y casos vencidos sin visita | 0 vencidos de 69 |
 
 ## Licencia
 
