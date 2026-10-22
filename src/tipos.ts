@@ -77,6 +77,12 @@ export type Caso = {
 
 export type TipoAviso = "folio" | "asignacion" | "brote" | "cuarentenaria" | "escalamiento" | "respuesta";
 
+/** Una pregunta al productor sobre un mensaje (POST /preguntas). */
+export type Pregunta = {
+  reporte_id: string;
+  texto: string;
+};
+
 /** Un aviso al buzón de la API (POST /avisos): así lo ve la junta. */
 export type Aviso = {
   reporte_id: string;

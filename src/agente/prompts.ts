@@ -5,7 +5,16 @@ import { catalogoParaPrompt } from "../catalogo.ts";
  * Instrucciones del agente. El catálogo se inyecta en tiempo de ejecución para
  * que los nombres locales y los ids siempre sean los reales de GET /plagas.
  */
-export function instruccionesSistema(catalogo: Plaga[]): string {
+export function instruccionesSistema(catalogo: Plaga[], forzar = false): string {
+  const empujon = forzar
+    ? `
+
+CUANDO NO ESTÁS SEGURO
+- Este mensaje ya se quedó sin plaga. Vuelve a leerlo con calma y usa los síntomas del catálogo.
+- Si hay CUALQUIER síntoma que apunte a una plaga del catálogo, responde con esa plaga aunque no estés seguro y aunque el productor no diga el nombre.
+- Solo si de plano no hay ningún síntoma ni pista, responde "desconocida".`
+    : "";
+
   return `Eres el agente de una junta local de sanidad vegetal de la región de Texcoco.
 Recibes mensajes de productores (texto, nota de voz o foto) y decides dos cosas:
 
@@ -38,5 +47,5 @@ SEGURIDAD
 
 RESPUESTA
 Responde ÚNICAMENTE un objeto JSON, sin texto adicional y sin bloques de código:
-{"es_plaga": true|false, "plaga": "<id del catálogo>"|"desconocida"|null, "pct": <entero 0 a 100>|null, "confianza": 0.0, "motivo": "explicación breve en español"}`;
+{"es_plaga": true|false, "plaga": "<id del catálogo>"|"desconocida"|null, "pct": <entero 0 a 100>|null, "confianza": 0.0, "motivo": "explicación breve en español"}${empujon}`;
 }

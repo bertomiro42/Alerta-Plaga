@@ -15,6 +15,7 @@
     "reglas": "node --env-file-if-exists=.env src/scripts/probar-reglas.ts",
     "complementar": "node --env-file-if-exists=.env src/scripts/complementar.ts",
     "avisar": "node --env-file-if-exists=.env src/scripts/avisar-caso.ts",
+    "reintentar": "node --env-file-if-exists=.env src/scripts/reintentar-plagas.ts",
     "probar": "node --env-file-if-exists=.env src/scripts/clasificar-uno.ts",
     "modelos": "node --env-file-if-exists=.env src/scripts/listar-modelos.ts",
     "telegram": "node --env-file-if-exists=.env src/scripts/probar-telegram.ts"

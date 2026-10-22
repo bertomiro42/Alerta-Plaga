@@ -29,7 +29,15 @@ const cliente = new ClienteApi(config.apiUrl, token);
 const catalogo = await cargarCatalogo(cliente);
 
 const parcelas = new Map<string, Parcela>();
-for (const parcela of await cliente.parcelas()) parcelas.set(parcela.id, parcela);
+const parcelasPorProductor = new Map<string, Parcela[]>();
+for (const parcela of await cliente.parcelas()) {
+  parcelas.set(parcela.id, parcela);
+  if (parcela.productor_id) {
+    const suyas = parcelasPorProductor.get(parcela.productor_id) ?? [];
+    suyas.push(parcela);
+    parcelasPorProductor.set(parcela.productor_id, suyas);
+  }
+}
 
 const estado = await cargarEstado(config.rutaDatos);
 const telegram = new Telegram(config.telegramBotToken, config.telegramCoordinador, false);
@@ -41,6 +49,7 @@ const ctx: Contexto = {
   cliente,
   catalogo,
   parcelas,
+  parcelasPorProductor,
   estado,
   telegram,
   aprobaciones,

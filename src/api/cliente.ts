@@ -1,4 +1,4 @@
-import type { Aviso, Caso, CasoPrevio, Parcela, Reporte, Tecnico } from "../tipos.ts";
+import type { Aviso, Caso, CasoPrevio, Parcela, Pregunta, Reporte, Tecnico } from "../tipos.ts";
 
 /** Acepta la respuesta como lista directa o envuelta en una clave. */
 function comoLista<T>(datos: unknown, claves: string[]): T[] {
@@ -104,6 +104,11 @@ export class ClienteApi {
   /** Manda un aviso al buzón de la API (para el coordinador, un técnico, etc.). */
   enviarAviso(aviso: Aviso): Promise<unknown> {
     return this.pedir("POST", "/avisos", aviso);
+  }
+
+  /** Hace UNA pregunta al productor. La respuesta llega en /reportes con `respuesta_a`. */
+  enviarPregunta(pregunta: Pregunta): Promise<unknown> {
+    return this.pedir("POST", "/preguntas", pregunta);
   }
 
   equipo(): Promise<unknown> {

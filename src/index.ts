@@ -72,9 +72,17 @@ async function main(): Promise<void> {
   );
 
   const parcelas = new Map<string, Parcela>();
+  const parcelasPorProductor = new Map<string, Parcela[]>();
   try {
-    for (const parcela of await cliente.parcelas()) parcelas.set(parcela.id, parcela);
-    log.info(`Parcelas cargadas: ${parcelas.size}.`);
+    for (const parcela of await cliente.parcelas()) {
+      parcelas.set(parcela.id, parcela);
+      if (parcela.productor_id) {
+        const suyas = parcelasPorProductor.get(parcela.productor_id) ?? [];
+        suyas.push(parcela);
+        parcelasPorProductor.set(parcela.productor_id, suyas);
+      }
+    }
+    log.info(`Parcelas cargadas: ${parcelas.size} (de ${parcelasPorProductor.size} productores).`);
   } catch (error) {
     log.aviso(`No se pudieron cargar las parcelas: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -96,6 +104,7 @@ async function main(): Promise<void> {
     cliente,
     catalogo,
     parcelas,
+    parcelasPorProductor,
     estado,
     telegram,
     aprobaciones,

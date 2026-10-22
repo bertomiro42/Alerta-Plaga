@@ -40,8 +40,15 @@ export type Estado = {
   transcripciones: Record<string, string>;
   /** Casos que cuentan para detectar brotes (de /casos-previos y los nuestros). */
   casosParaBrote: CasoParaBrote[];
+  /** Preguntas hechas al productor, por folio del mensaje original. */
+  preguntas: Record<string, PreguntaEnviada>;
   casos: CasoGuardado[];
   estadisticas: Estadisticas;
+};
+
+export type PreguntaEnviada = {
+  enviadaEn: string;
+  respondida: boolean;
 };
 
 export function estadoInicial(): Estado {
@@ -52,6 +59,7 @@ export function estadoInicial(): Estado {
     clasificaciones: {},
     transcripciones: {},
     casosParaBrote: [],
+    preguntas: {},
     casos: [],
     estadisticas: { ciclos: 0, registrados: 0, avisos: 0, errores: 0, ultimoCiclo: null },
   };
@@ -92,6 +100,7 @@ export async function cargarEstado(rutaDatos: string): Promise<Estado> {
           ? datos.transcripciones
           : {},
       casosParaBrote: Array.isArray(datos.casosParaBrote) ? datos.casosParaBrote : [],
+      preguntas: typeof datos.preguntas === "object" && datos.preguntas !== null ? datos.preguntas : {},
       casos: Array.isArray(datos.casos) ? datos.casos : [],
       estadisticas: estadisticasDe(datos.estadisticas),
     };

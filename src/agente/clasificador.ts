@@ -13,6 +13,8 @@ export type OpcionesClasificador = {
   modeloAudio: string;
   razonamiento: string;
   catalogo: Plaga[];
+  /** true para insistir en que elija la plaga más probable en vez de "desconocida". */
+  forzar?: boolean;
   /** Caché de transcripciones, para no volver a transcribir la misma nota de voz. */
   transcripciones?: Record<string, string>;
 };
@@ -136,7 +138,7 @@ export async function clasificar(
       opciones.apiKey,
       modelo,
       [
-        { role: "system", content: instruccionesSistema(opciones.catalogo) },
+        { role: "system", content: instruccionesSistema(opciones.catalogo, opciones.forzar === true) },
         { role: "user", content: partes },
       ],
       { json: true, razonamiento: opciones.razonamiento },
