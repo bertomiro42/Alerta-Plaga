@@ -10,6 +10,7 @@ import { buscarPlaga, quitarAcentos } from "./catalogo.ts";
 import { calcularPrioridad, detallePrioridad, PCT_POR_DEFECTO, semaforoDePrioridad } from "./dominio/prioridad.ts";
 import { elegirTecnico } from "./dominio/tecnico.ts";
 import { hayBrote, type CasoParaBrote } from "./dominio/brote.ts";
+import { productoresVecinos } from "./dominio/vecinos.ts";
 import { distanciaKm } from "./dominio/geo.ts";
 import { guardarEstado } from "./estado.ts";
 import { ErrorApi } from "./api/cliente.ts";
@@ -325,6 +326,30 @@ async function cerrarCaso(
           log.error(
             `No se pudo avisar a sanidad vegetal por ${reporte.id}: ${error instanceof Error ? error.message : String(error)}`,
           );
+        }
+      }
+
+      // Brote: se avisa a los productores vecinos con el mismo cultivo (sección 12).
+      if (decision.brote && parcela) {
+        const vecinos = productoresVecinos(ctx.parcelas.values(), parcela);
+        if (vecinos.length > 0) {
+          try {
+            await ctx.cliente.enviarAviso({
+              reporte_id: reporte.id,
+              tipo: "brote",
+              para: vecinos,
+              mensaje:
+                `Hay un brote de ${plaga?.nombre ?? "una plaga"} en parcelas de ${parcela.cultivo} a menos de 5 km de la suya. ` +
+                `Le recomendamos revisar su cultivo y reportar cualquier síntoma. Folio del caso: ${reporte.id}.`,
+            });
+            log.info(`Aviso de brote a ${vecinos.length} productores vecinos de la parcela ${parcela.id}.`);
+          } catch (error) {
+            log.error(
+              `No se pudo avisar a los vecinos por ${reporte.id}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        } else {
+          log.info(`Hay brote en ${parcela.id}, pero no hay vecinos con ${parcela.cultivo} a menos de 5 km.`);
         }
       }
 

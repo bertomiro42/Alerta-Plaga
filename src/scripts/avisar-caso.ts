@@ -7,19 +7,24 @@ import { crearAprobaciones } from "../aprobaciones.ts";
 import { Supabase } from "../datos/supabase.ts";
 import { decidir, traerReportes, type Contexto } from "../bucle.ts";
 import { PCT_POR_DEFECTO } from "../dominio/prioridad.ts";
+import { productoresVecinos } from "../dominio/vecinos.ts";
 import type { Parcela } from "../tipos.ts";
 
 /**
- * Vuelve a mandar el aviso de un caso concreto, con los botones de aprobación.
- * Sirve para avisar casos urgentes que se resolvieron antes de configurar Telegram
- * y para ensayar la demostración del viernes.
+ * Vuelve a mandar el aviso de un caso concreto: el del coordinador (con los botones
+ * de aprobación) y, si hay brote, el de los productores vecinos.
+ * Sirve para avisar casos resueltos antes de configurar Telegram y para ensayar la
+ * demostración del viernes.
  *
- * Uso: pnpm avisar -- --reporte R-2037
+ * Uso:
+ *   pnpm avisar -- --reporte R-2124 --simular   (solo muestra lo que haría)
+ *   pnpm avisar -- --reporte R-2124
  */
+const simular = process.argv.includes("--simular");
 const indice = process.argv.indexOf("--reporte");
 const id = indice >= 0 ? (process.argv[indice + 1] ?? "") : "";
 if (!id) {
-  console.log("Uso: pnpm avisar -- --reporte R-2037");
+  console.log("Uso: pnpm avisar -- --reporte R-2124 [--simular]");
   process.exit(0);
 }
 
@@ -76,12 +81,26 @@ if (!plaga) {
   process.exit(0);
 }
 
+const parcela = reporte.parcela_id ? parcelas.get(reporte.parcela_id) : undefined;
 const pct = estado.clasificaciones[id]?.pct ?? PCT_POR_DEFECTO;
-const decision = await decidir(ctx, reporte, plaga, pct);
+const decision = await decidir(ctx, reporte, plaga, pct, parcela);
 console.log(`${id} · ${plaga.nombre} · ${decision.detalle}`);
 
-if (decision.semaforo !== "rojo" && decision.semaforo !== "naranja") {
-  console.log(`Semáforo ${decision.semaforo}: no se avisa al coordinador (solo rojo o naranja).`);
+const vecinos = parcela && decision.brote ? productoresVecinos(parcelas.values(), parcela) : [];
+if (decision.brote && parcela) {
+  console.log(`Brote: ${parcela.cultivo} en ${parcela.id}. Vecinos a avisar (mismo cultivo a <5 km): ${vecinos.length}`);
+  if (vecinos.length > 0) console.log(`  ${vecinos.slice(0, 12).join(", ")}${vecinos.length > 12 ? "…" : ""}`);
+}
+
+if (decision.semaforo !== "rojo" && decision.semaforo !== "naranja" && !decision.brote) {
+  console.log(`Semáforo ${decision.semaforo} y sin brote: no hay nada que avisar.`);
+  process.exit(0);
+}
+
+if (simular) {
+  console.log(
+    `[simulación] Se avisaría al coordinador${decision.brote ? ` y a ${vecinos.length} productores vecinos` : ""}.`,
+  );
   process.exit(0);
 }
 
@@ -89,7 +108,7 @@ const texto = reporte.texto ?? estado.transcripciones[id] ?? "";
 const enviado = await aprobaciones.solicitar({
   reporteId: reporte.id,
   recibido: reporte.recibido,
-  semaforo: decision.semaforo,
+  semaforo: decision.semaforo ?? "amarillo",
   plaga: plaga.id,
   nombrePlaga: plaga.nombre,
   prioridad: decision.prioridad,
@@ -97,7 +116,7 @@ const enviado = await aprobaciones.solicitar({
   motivo: decision.detalle,
   tecnicoId: decision.tecnicoId,
   productor: reporte.productor_id,
-  parcela: reporte.parcela_id,
+  parcela: parcela?.id ?? reporte.parcela_id,
   texto,
   lat: reporte.lat,
   lon: reporte.lon,
@@ -112,7 +131,7 @@ await cliente.enviarAviso({
   reporte_id: reporte.id,
   tipo: "escalamiento",
   para: "coordinador",
-  mensaje: `Aviso del caso ${decision.semaforo}: ${plaga.nombre} (${plaga.id}), prioridad ${decision.prioridad ?? "?"}, técnico ${decision.tecnicoId ?? "sin técnico disponible"}. Parcela ${reporte.parcela_id ?? "sin identificar"}.`,
+  mensaje: `Aviso del caso ${decision.semaforo}: ${plaga.nombre} (${plaga.id}), prioridad ${decision.prioridad ?? "?"}, técnico ${decision.tecnicoId ?? "sin técnico disponible"}. Parcela ${parcela?.id ?? "sin identificar"}.`,
 });
 console.log("Aviso también enviado al buzón de la API.");
 
@@ -121,7 +140,19 @@ if (plaga.cuarentenaria) {
     reporte_id: reporte.id,
     tipo: "cuarentenaria",
     para: "sanidad_vegetal",
-    mensaje: `Plaga cuarentenaria: ${plaga.nombre} (${plaga.id}), semáforo ${decision.semaforo}, prioridad ${decision.prioridad ?? "?"}. Parcela ${reporte.parcela_id ?? "sin identificar"}, productor ${reporte.productor_id ?? "sin dato"}. Folio ${reporte.id}.`,
+    mensaje: `Plaga cuarentenaria: ${plaga.nombre} (${plaga.id}), semáforo ${decision.semaforo}, prioridad ${decision.prioridad ?? "?"}. Parcela ${parcela?.id ?? "sin identificar"}, productor ${reporte.productor_id ?? "sin dato"}. Folio ${reporte.id}.`,
   });
   console.log("Aviso de cuarentenaria enviado a sanidad vegetal.");
+}
+
+if (decision.brote && parcela && vecinos.length > 0) {
+  await cliente.enviarAviso({
+    reporte_id: reporte.id,
+    tipo: "brote",
+    para: vecinos,
+    mensaje:
+      `Hay un brote de ${plaga.nombre} en parcelas de ${parcela.cultivo} a menos de 5 km de la suya. ` +
+      `Le recomendamos revisar su cultivo y reportar cualquier síntoma. Folio del caso: ${reporte.id}.`,
+  });
+  console.log(`Aviso de brote enviado a ${vecinos.length} productores vecinos.`);
 }
