@@ -4,22 +4,22 @@ Sistema del reto **«Alerta Plaga»** (IT Green × DIMA, Universidad Autónoma C
 
 > **Pregunta del reto:** ¿cómo lograr que el aviso de un productor se reciba, se interprete y se atienda antes de que la plaga se extienda?
 
-El sistema consulta cada minuto los mensajes que los productores mandan (texto, nota de voz y foto). Un **agente de IA** decide si es un reporte de plaga, de qué plaga se trata y qué porcentaje de la parcela está afectado. Luego **reglas en código** (sin IA) calculan la **prioridad** y el **semáforo** y eligen al **técnico**, y si el semáforo es rojo o naranja se avisa al coordinador por Telegram. El resultado se registra en la API del hackathon.
+El sistema consulta cada minuto los mensajes que los productores mandan (texto, nota de voz y foto). Un **agente de IA** decide si es un reporte de plaga, de qué plaga se trata y qué porcentaje de la parcela está afectado. Luego **reglas en código** (sin IA) calculan la **prioridad** y el **semáforo**, eligen al **técnico** y detectan **brotes**; si el semáforo es rojo o naranja, o si hay brote, se avisa al coordinador por Telegram. El resultado se registra en la API del hackathon.
 
 ## Flujo
 
 ```
-GET /reportes ──► agente de IA ──► reglas (prioridad, semáforo, técnico) ──► Telegram (coordinador)
-   (texto, voz,    (plaga, pct)              │
-    foto)                                     ├─► POST /casos  (una sola vez)
-                                              └─► POST /avisos (buzón de la junta)
+GET /reportes ──► agente de IA ──► reglas (prioridad, semáforo, técnico, brote) ──► Telegram (coordinador)
+   (texto, voz,    (plaga, pct)                 │
+    foto)                                        ├─► POST /casos  (una sola vez)
+                                                 └─► POST /avisos (buzón de la junta)
 ```
 
 | Paso | Dónde |
 | --- | --- |
 | Recibir los mensajes nuevos | `src/bucle.ts` + `src/api/cliente.ts` |
 | Interpretar con IA (plaga y porcentaje) | `src/agente/` |
-| Prioridad, semáforo y técnico (sin IA) | `src/dominio/` |
+| Prioridad, semáforo, técnico y brote (sin IA) | `src/dominio/` |
 | Avisar al coordinador | `src/telegram.ts` + `POST /avisos` |
 | Registrar el resultado | `src/bucle.ts` → `POST /casos` |
 | Panel web | `src/web/` |
@@ -33,6 +33,7 @@ GET /reportes ──► agente de IA ──► reglas (prioridad, semáforo, té
 | `src/bucle.ts` | Un ciclo completo: recibir → interpretar → decidir → avisar → registrar. |
 | `src/dominio/prioridad.ts` | Prioridad y semáforo (fórmulas del reto, sin IA). |
 | `src/dominio/tecnico.ts` | Elección del técnico (especialidad, carga y distancia). |
+| `src/dominio/brote.ts` | Detección de brotes (3 casos, 5 km, 168 h). |
 | `src/dominio/geo.ts` | Distancia con haversine (R = 6371 km). |
 | `src/catalogo.ts` | Normaliza `GET /plagas` y arma el texto para el agente. |
 | `src/api/cliente.ts` | Cliente de la API del hackathon. |
@@ -171,43 +172,58 @@ Desde el martes por la noche, cada caso lleva **semáforo** y **técnico**, y el
 4. Empates al metro: menor carga y, después, menor `id`.
 5. Si nadie cumple, `tecnico_id: null`.
 
+### Brote
+
+Hay **brote** si, contando el caso actual, hay **3 o más casos de la misma plaga** con parcelas a **menos de 5 km**, recibidos en las **168 h previas** al mensaje.
+
+- Cuentan los casos de `GET /casos-previos` y los que va encontrando el sistema; el historial se guarda en el estado.
+- **No cuentan** los seguimientos, los mensajes que no son reporte ni los que no se pudieron aclarar. La propia API indica si un caso era seguimiento (responde `maximo: 2`), así que el historial se corrige solo.
+- La distancia se mide entre **parcelas**, con haversine (R = 6371 km). Si el sistema se equivoca de plaga o no ubica una parcela, ese caso falta o sobra en los conteos siguientes.
+- Si hay brote, se avisa al coordinador aunque el semáforo no sea rojo ni naranja.
+
 ### Cómo se probaron las reglas
 
-`GET /casos-previos` trae 40 casos de la semana pasada con su prioridad, su semáforo y su técnico correctos:
+`GET /casos-previos` trae 40 casos de la semana pasada con su prioridad, su semáforo, su técnico y su brote correctos:
 
 ```bash
 pnpm reglas
 ```
 
-Nuestras reglas dan **40/40 en prioridad, 40/40 en semáforo y 40/40 en técnico**.
+Nuestras reglas dan **40/40 en prioridad, semáforo, técnico y brote**. Para el brote de un caso previo se cuentan solo los casos previos, como indican las reglas.
 
 ### Completar lo registrado antes del Nivel 2
 
-Los casos ya registrados se pueden mandar **una sola vez** otra vez con `semaforo` y `tecnico_id`:
+A los casos ya registrados se les puede agregar lo que les falte (`semaforo`, `tecnico_id`, `brote`); cada campo cuenta la primera vez que se manda:
 
 ```bash
-pnpm complementar -- --simular   # revisa sin mandar nada
-pnpm complementar                # lo manda y recuerda lo hecho en .data/complementados.json
+supervisorctl stop app            # conviene detener la app: el script reconstruye el historial
+pnpm complementar -- --simular    # revisa sin mandar nada
+pnpm complementar                 # lo manda y reescribe el historial de brotes
+supervisorctl start app
 ```
 
 ### Seguimientos
 
-Los **seguimientos** («¿ya vieron lo del gusano?», «sigue igual») sí son reportes de plaga, pero **no abren un caso nuevo**: su semáforo y su técnico no se califican.
+Los **seguimientos** («¿ya vieron lo del gusano?», «sigue igual») sí son reportes de plaga, pero **no abren un caso nuevo**: su semáforo, su técnico y su brote no se califican, y no cuentan para los brotes.
+
+### Campos que no se mandan
+
+Si no se puede aplicar una regla (falta la plaga o falta la parcela), el campo **no se manda**. Mandarlo en `null` cuenta como respuesta y puede restar −1; no mandarlo vale 0, que es lo correcto cuando no sabemos.
 
 ## Cómo se decide
 
 - **¿Es reporte de plaga?** Lo decide el agente: describe un problema en el cultivo (también los seguimientos). Saludos, precios, trámites o fotos de otra cosa no lo son.
 - **¿Qué plaga?** Siempre un `id` del catálogo de `GET /plagas`. Si no se puede saber, `"desconocida"` (no resta). El código nunca inventa un id: si el modelo propone uno que no existe, se registra `"desconocida"`.
-- **¿Es urgente?** Lo decide la regla de `src/dominio/prioridad.ts`, sin IA: se calcula la prioridad (severidad + superficie + etapa) y el semáforo. Se avisa al coordinador solo si es **rojo o naranja**.
+- **¿Es urgente?** Lo decide la regla de `src/dominio/`, sin IA: se calcula la prioridad (severidad + superficie + etapa) y el semáforo, y se busca brote. Se avisa al coordinador si el semáforo es **rojo o naranja** o si **hay brote**.
 - **Seguridad:** el texto del productor se le entrega al agente como datos, no como instrucciones; los mensajes que intentan manipular se clasifican por lo que realmente dicen.
 
 ## Aprobación del coordinador y avisos
 
-Cuando un caso sale **rojo o naranja**:
+Cuando un caso sale **rojo o naranja**, o cuando hay **brote**:
 
 1. El bot manda al coordinador el caso con su **plaga, parcela, prioridad y técnico**, con dos botones: **✅ Aprobar** y **🔁 Cambiar técnico**.
 2. Al aprobar, se avisa **al productor su folio** (`POST /avisos`, `tipo: folio`) y **al técnico su caso** (`tipo: asignacion`). Si el coordinador cambió de técnico, se avisa al elegido.
-3. En todos los casos rojo/naranja queda constancia en el buzón de la junta (`tipo: escalamiento`, `para: coordinador`).
+3. En todos los casos rojo/naranja o con brote queda constancia en el buzón de la junta (`tipo: escalamiento`, `para: coordinador`).
 4. Si la plaga es **cuarentenaria**, además se avisa de inmediato a **sanidad vegetal** (`tipo: cuarentenaria`, `para: sanidad_vegetal`).
 
 Las aprobaciones pendientes se guardan en `.data/aprobaciones.json`, así que sobreviven a un reinicio del servidor.
