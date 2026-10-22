@@ -436,8 +436,9 @@ async function procesarRespuestaAProductor(ctx: Contexto, respuesta: Reporte): P
   log.info(
     `El productor contestó la pregunta de ${originalId}: ${parcela ? `parcela ${parcela.id}` : "no se pudo ubicar la parcela"}.`,
   );
-  // La respuesta no se registra aparte: cuenta el folio original.
-  return { ...resultado, extraProcesados: [respuesta.id] };
+  // La respuesta no se registra aparte: cuenta el folio original. Los dos quedan
+  // marcados como procesados para que el original no siga apareciendo pendiente.
+  return { ...resultado, extraProcesados: [respuesta.id, originalId] };
 }
 
 /**
@@ -538,7 +539,9 @@ export async function ejecutarCiclo(ctx: Contexto): Promise<ResumenCiclo> {
   }
 
   ctx.estado.procesados = [...procesados];
-  ctx.estado.pendientes = pendientesFinales;
+  // Un mensaje pudo quedar pendiente y resolverse más tarde en el mismo ciclo
+  // (por ejemplo, al llegar la respuesta del productor): no se deja colgado.
+  ctx.estado.pendientes = pendientesFinales.filter((reporte) => !procesados.has(reporte.id));
   ctx.estado.estadisticas.ciclos++;
   ctx.estado.estadisticas.ultimoCiclo = new Date().toISOString();
   resumen.pendientes = pendientesFinales.length;
