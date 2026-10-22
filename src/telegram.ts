@@ -24,6 +24,7 @@ export type DatosAviso = {
   plaga: string;
   nombrePlaga: string;
   prioridad: number | null;
+  brote: boolean;
   motivo: string;
   tecnicoId: string | null;
   productor: string | null;
@@ -37,7 +38,7 @@ export type DatosAviso = {
 export function armarAvisoCaso(datos: DatosAviso): string {
   const tecnico = datos.tecnicoId ?? "sin técnico disponible";
   const lineas = [
-    `${EMOJI[datos.semaforo]} <b>Caso ${escaparHtml(datos.semaforo)}</b>`,
+    `${EMOJI[datos.semaforo]} <b>Caso ${escaparHtml(datos.semaforo)}</b>${datos.brote ? " · 🌾 <b>BROTE</b>" : ""}`,
     `Folio: <code>${escaparHtml(datos.reporteId)}</code>`,
     `Plaga: <b>${escaparHtml(datos.nombrePlaga)}</b> (<code>${escaparHtml(datos.plaga)}</code>)`,
     `Prioridad: ${datos.prioridad ?? "?"}`,

@@ -1,23 +1,26 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { cargarConfig, exigir } from "../config.ts";
 import { ClienteApi, ErrorApi } from "../api/cliente.ts";
 import { buscarPlaga, cargarCatalogo } from "../catalogo.ts";
 import { clasificar } from "../agente/clasificador.ts";
 import { calcularPrioridad, detallePrioridad, PCT_POR_DEFECTO, semaforoDePrioridad } from "../dominio/prioridad.ts";
 import { elegirTecnico } from "../dominio/tecnico.ts";
-import { cargarEstado } from "../estado.ts";
+import { hayBrote, type CasoParaBrote } from "../dominio/brote.ts";
+import { cargarEstado, guardarEstado } from "../estado.ts";
 import { traerReportes } from "../bucle.ts";
 import { log } from "../logger.ts";
 import type { Caso, Parcela } from "../tipos.ts";
 
 /**
- * Completa los casos que ya se registraron antes del Nivel 2, mandándolos otra vez
- * UNA sola vez con `semaforo` y `tecnico_id` (las reglas lo permiten, sección 9).
+ * Completa los casos ya registrados con lo que les falte (semáforo, técnico y brote).
+ * Cada campo cuenta la primera vez que se manda, así que volver a mandarlos es seguro.
  *
- * Uso:
- *   node --env-file-if-exists=.env src/scripts/complementar.ts --simular   (no manda nada)
- *   node --env-file-if-exists=.env src/scripts/complementar.ts             (lo manda)
+ * Conviene correrlo con la aplicación detenida, porque reconstruye el historial de
+ * brotes y lo deja guardado en .data/estado.json:
+ *
+ *   supervisorctl stop app
+ *   node --env-file-if-exists=.env src/scripts/complementar.ts --simular
+ *   node --env-file-if-exists=.env src/scripts/complementar.ts
+ *   supervisorctl start app
  */
 const simular = process.argv.includes("--simular");
 const config = cargarConfig();
@@ -29,41 +32,42 @@ const parcelas = new Map<string, Parcela>();
 for (const parcela of await cliente.parcelas()) parcelas.set(parcela.id, parcela);
 
 const estado = await cargarEstado(config.rutaDatos);
-const registrados = new Map(estado.casos.map((caso) => [caso.reporte_id, caso]));
+const guardados = new Map(estado.casos.map((caso) => [caso.reporte_id, caso]));
 
-// Registro de lo ya complementado, para no repetirlo (la API solo acepta una vez).
-const archivoComplementados = join(config.rutaDatos, "complementados.json");
-let complementados: string[] = [];
-try {
-  complementados = JSON.parse(await readFile(archivoComplementados, "utf8")) as string[];
-} catch {
-  complementados = [];
+// Historial para brotes: primero los casos de la semana pasada.
+const historial: CasoParaBrote[] = [];
+const enHistorial = new Set<string>();
+for (const previo of await cliente.casosPrevios()) {
+  if (!Number.isFinite(previo.lat) || !Number.isFinite(previo.lon)) continue;
+  historial.push({
+    reporteId: previo.reporte_id,
+    plaga: previo.plaga,
+    lat: previo.lat,
+    lon: previo.lon,
+    recibido: Date.parse(previo.recibido),
+  });
+  enHistorial.add(previo.reporte_id);
 }
-const yaHechos = new Set(complementados);
 
 const reportes = await traerReportes(cliente, config.desde);
-log.info(`Mensajes publicados: ${reportes.length} · ya registrados: ${registrados.size} · ya complementados: ${yaHechos.size}`);
-if (simular) log.aviso("Modo --simular: no se manda nada a la API.");
+log.info(`Mensajes: ${reportes.length} · casos previos en el historial: ${historial.length}`);
+if (simular) log.aviso("Modo --simular: no se manda nada.");
 
-let hechos = 0;
+let enviados = 0;
+let conBrote = 0;
 let saltados = 0;
 let errores = 0;
-let puntosGanados = 0;
-const detalle: string[] = [];
+let agregados = 0;
+const lineas: string[] = [];
 
 for (const reporte of reportes) {
-  const caso = registrados.get(reporte.id);
-  if (!caso || !caso.es_plaga) {
-    saltados++;
-    continue;
-  }
-  if (yaHechos.has(reporte.id)) {
+  const guardado = guardados.get(reporte.id);
+  if (!guardado?.es_plaga) {
     saltados++;
     continue;
   }
 
-  // La plaga registrada manda; si era desconocida, se intenta con la interpretación nueva.
-  let plaga = buscarPlaga(catalogo, caso.plaga);
+  let plaga = buscarPlaga(catalogo, guardado.plaga);
   const clasificacion = await clasificar(
     cliente,
     {
@@ -85,52 +89,71 @@ for (const reporte of reportes) {
     continue;
   }
 
-  const pct = clasificacion?.pct ?? PCT_POR_DEFECTO;
+  const pct = clasificacion?.pct ?? estado.clasificaciones[reporte.id]?.pct ?? PCT_POR_DEFECTO;
   const prioridad = calcularPrioridad(plaga, parcela, pct);
   const semaforo = semaforoDePrioridad(prioridad);
   const tecnicoId = elegirTecnico(await cliente.tecnicos(reporte.recibido), plaga, parcela);
 
+  const actual: CasoParaBrote = {
+    reporteId: reporte.id,
+    plaga: plaga.id,
+    lat: parcela.lat,
+    lon: parcela.lon,
+    recibido: Date.parse(reporte.recibido),
+  };
+  const brote = hayBrote(historial, actual);
+
   const cuerpo: Caso = {
     reporte_id: reporte.id,
     es_plaga: true,
-    plaga: caso.plaga ?? plaga.id,
+    plaga: guardado.plaga ?? plaga.id,
     semaforo,
     tecnico_id: tecnicoId,
+    brote,
     prioridad,
   };
 
-  const linea = `${reporte.id} · ${plaga.id} · pct ${pct} · ${semaforo} · ${tecnicoId ?? "sin técnico"} · prioridad ${prioridad}`;
+  const etiqueta = `${reporte.id} · ${plaga.id} · ${semaforo} · ${tecnicoId ?? "sin técnico"} · brote ${brote ? "SÍ" : "no"}`;
 
   if (simular) {
-    detalle.push(`${linea}\n     ${detallePrioridad(plaga, parcela, pct)}`);
-    hechos++;
+    if (brote) conBrote++;
+    enviados++;
+    lineas.push(`${etiqueta}\n     ${detallePrioridad(plaga, parcela, pct)}`);
+    // En simulación también se arma el historial, para que el conteo sea realista.
+    if (!enHistorial.has(reporte.id)) {
+      historial.push(actual);
+      enHistorial.add(reporte.id);
+    }
     continue;
   }
 
   try {
-    const respuesta = (await cliente.registrarCaso(cuerpo)) as { puntos?: number; complemento?: boolean };
-    puntosGanados += respuesta.puntos ?? 0;
-    hechos++;
-    yaHechos.add(reporte.id);
-    complementados.push(reporte.id);
-    detalle.push(`${linea} → ${JSON.stringify(respuesta)}`);
-    log.info(`Complementado ${reporte.id}: ${respuesta.puntos ?? "?"} puntos (complemento: ${respuesta.complemento ?? "?"})`);
+    const respuesta = (await cliente.registrarCaso(cuerpo)) as { puntos?: number; maximo?: number; complemento?: boolean };
+    enviados++;
+    if (brote) conBrote++;
+    // La propia API dice si el mensaje era un seguimiento: entonces no cuenta para brotes.
+    if (respuesta.maximo !== 2 && !enHistorial.has(reporte.id)) {
+      historial.push(actual);
+      enHistorial.add(reporte.id);
+      agregados++;
+    }
+    lineas.push(`${etiqueta} → ${JSON.stringify(respuesta)}`);
   } catch (error) {
     errores++;
-    if (error instanceof ErrorApi && error.estadoHttp === 409) {
-      detalle.push(`${linea} → ya estaba registrado sin complemento (409)`);
-    } else {
-      detalle.push(`${linea} → error: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    lineas.push(
+      `${etiqueta} → error: ${error instanceof ErrorApi ? error.message : String(error)}`,
+    );
   }
-
-  // Se guarda el avance después de cada uno, por si se interrumpe.
-  await writeFile(archivoComplementados, JSON.stringify(complementados, null, 2), "utf8");
 }
 
 console.log();
-for (const linea of detalle) console.log(linea);
+for (const linea of lineas) console.log(linea);
 console.log();
+
+// Se guarda el historial para que la aplicación lo use al arrancar.
+estado.casosParaBrote = historial;
+await guardarEstado(config.rutaDatos, estado);
+
 log.info(
-  `${simular ? "Simulación" : "Resultado"}: ${hechos} ${simular ? "por complementar" : "complementados"}, ${saltados} saltados, ${errores} errores${simular ? "" : `, ${puntosGanados} puntos`}`,
+  `${simular ? "Simulación" : "Resultado"}: ${enviados} ${simular ? "por complementar" : "complementados"} (${conBrote} con brote), ${saltados} saltados, ${errores} errores · historial de brotes: ${historial.length} casos (${agregados} nuevos).`,
 );

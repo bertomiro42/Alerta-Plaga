@@ -3,6 +3,7 @@ import { ClienteApi } from "../api/cliente.ts";
 import { buscarPlaga, cargarCatalogo } from "../catalogo.ts";
 import { calcularPrioridad, detallePrioridad, PCT_POR_DEFECTO, semaforoDePrioridad } from "../dominio/prioridad.ts";
 import { detalleTecnico, elegirTecnico } from "../dominio/tecnico.ts";
+import { hayBrote, type CasoParaBrote } from "../dominio/brote.ts";
 import type { Parcela } from "../tipos.ts";
 
 /**
@@ -23,9 +24,36 @@ console.log(`Casos previos: ${previos.length}\n`);
 let okPrioridad = 0;
 let okSemaforo = 0;
 let okTecnico = 0;
+let okBrote = 0;
 const fallos: string[] = [];
 
+// Para el brote de un caso previo se cuentan solo los casos previos.
+const paraBrote: CasoParaBrote[] = previos.map((caso) => ({
+  reporteId: caso.reporte_id,
+  plaga: caso.plaga,
+  lat: caso.lat,
+  lon: caso.lon,
+  recibido: Date.parse(caso.recibido),
+}));
+
 for (const caso of previos) {
+  // El brote se puede evaluar aunque la parcela no esté en /parcelas, porque
+  // /casos-previos ya trae las coordenadas.
+  const actual: CasoParaBrote = {
+    reporteId: caso.reporte_id,
+    plaga: caso.plaga,
+    lat: caso.lat,
+    lon: caso.lon,
+    recibido: Date.parse(caso.recibido),
+  };
+  const brote = hayBrote(paraBrote, actual);
+  if (brote === caso.brote) okBrote++;
+  else {
+    fallos.push(
+      `${caso.reporte_id} · brote: esperado ${caso.brote}, obtuvimos ${brote} (${caso.plaga} · ${caso.recibido})`,
+    );
+  }
+
   const plaga = buscarPlaga(catalogo, caso.plaga);
   if (!plaga) {
     fallos.push(`${caso.reporte_id}: la plaga "${caso.plaga}" no está en el catálogo`);
@@ -65,6 +93,7 @@ for (const caso of previos) {
 console.log(`prioridad: ${okPrioridad}/${previos.length}`);
 console.log(`semáforo:  ${okSemaforo}/${previos.length}`);
 console.log(`técnico:   ${okTecnico}/${previos.length}`);
+console.log(`brote:     ${okBrote}/${previos.length}`);
 console.log();
 
 if (fallos.length === 0) {

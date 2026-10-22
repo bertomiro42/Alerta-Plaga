@@ -84,6 +84,7 @@ const enviado = await aprobaciones.solicitar({
   plaga: plaga.id,
   nombrePlaga: plaga.nombre,
   prioridad: decision.prioridad,
+  brote: decision.brote === true,
   motivo: decision.detalle,
   tecnicoId: decision.tecnicoId,
   productor: reporte.productor_id,

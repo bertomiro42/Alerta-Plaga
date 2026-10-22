@@ -9,6 +9,7 @@ import { clasificar } from "./agente/clasificador.ts";
 import { buscarPlaga } from "./catalogo.ts";
 import { calcularPrioridad, detallePrioridad, PCT_POR_DEFECTO, semaforoDePrioridad } from "./dominio/prioridad.ts";
 import { elegirTecnico } from "./dominio/tecnico.ts";
+import { hayBrote, type CasoParaBrote } from "./dominio/brote.ts";
 import { guardarEstado } from "./estado.ts";
 import { ErrorApi } from "./api/cliente.ts";
 import { log } from "./logger.ts";
@@ -109,26 +110,42 @@ async function tecnicosEn(ctx: Contexto, momento: string): Promise<Tecnico[]> {
 }
 
 export type Decision = {
+  /** true cuando se pudieron aplicar las reglas (hay plaga y parcela). */
+  evaluado: boolean;
   semaforo: Semaforo | null;
   tecnicoId: string | null;
   prioridad: number | null;
+  brote: boolean | null;
   detalle: string;
 };
 
-/** Aplica las reglas del reto: prioridad, semáforo y técnico. Nada de IA. */
+/** La parcela del mensaje. Si no trae `parcela_id`, no se puede ubicar con certeza. */
+function ubicarParcela(ctx: Contexto, reporte: Reporte): Parcela | undefined {
+  return reporte.parcela_id ? ctx.parcelas.get(reporte.parcela_id) : undefined;
+}
+
+/** Aplica las reglas del reto: prioridad, semáforo, técnico y brote. Nada de IA. */
 export async function decidir(
   ctx: Contexto,
   reporte: Reporte,
   plaga: Plaga | undefined,
   pct: number | null,
 ): Promise<Decision> {
-  const nada = (detalle: string): Decision => ({ semaforo: null, tecnicoId: null, prioridad: null, detalle });
+  const vacio = (detalle: string): Decision => ({
+    evaluado: false,
+    semaforo: null,
+    tecnicoId: null,
+    prioridad: null,
+    brote: null,
+    detalle,
+  });
 
-  if (!plaga) return nada("sin plaga identificada: no se calcula");
-  if (!reporte.parcela_id) return nada("el mensaje no trae parcela: no se calcula");
+  if (!plaga) return vacio("sin plaga identificada: no se calcula");
 
-  const parcela = ctx.parcelas.get(reporte.parcela_id);
-  if (!parcela) return nada(`no encontramos la parcela ${reporte.parcela_id}`);
+  const parcela = ubicarParcela(ctx, reporte);
+  if (!parcela) {
+    return vacio(reporte.parcela_id ? `no encontramos la parcela ${reporte.parcela_id}` : "el mensaje no trae parcela");
+  }
 
   const porcentaje = pct ?? PCT_POR_DEFECTO;
   const prioridad = calcularPrioridad(plaga, parcela, porcentaje);
@@ -141,11 +158,22 @@ export async function decidir(
     log.aviso(`No se pudieron consultar los técnicos para ${reporte.id}: ${String(error)}`);
   }
 
+  const actual: CasoParaBrote = {
+    reporteId: reporte.id,
+    plaga: plaga.id,
+    lat: parcela.lat,
+    lon: parcela.lon,
+    recibido: Date.parse(reporte.recibido),
+  };
+  const brote = hayBrote(ctx.estado.casosParaBrote, actual);
+
   return {
+    evaluado: true,
     semaforo,
     tecnicoId,
     prioridad,
-    detalle: `${detallePrioridad(plaga, parcela, porcentaje)} → ${prioridad} (${semaforo})`,
+    brote,
+    detalle: `${detallePrioridad(plaga, parcela, porcentaje)} → ${prioridad} (${semaforo})${brote ? " · BROTE" : ""}`,
   };
 }
 
@@ -167,17 +195,23 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
 
   const plaga = clasificacion.es_plaga ? buscarPlaga(ctx.catalogo, clasificacion.plaga) : undefined;
   const decision = await decidir(ctx, reporte, plaga, clasificacion.pct);
-  const avisa = decision.semaforo === "rojo" || decision.semaforo === "naranja";
+  const avisa = decision.semaforo === "rojo" || decision.semaforo === "naranja" || decision.brote === true;
 
   const caso: Caso = {
     reporte_id: reporte.id,
     es_plaga: clasificacion.es_plaga,
     plaga: clasificacion.es_plaga ? (clasificacion.plaga ?? "desconocida") : null,
-    semaforo: decision.semaforo,
-    tecnico_id: decision.tecnicoId,
-    prioridad: decision.prioridad,
     caso: `AP-${reporte.id}`,
   };
+  // Semáforo, técnico, brote y prioridad solo se mandan si las reglas se pudieron
+  // aplicar. Mandar `null` cuenta como respuesta (y puede restar −1); NO mandar el
+  // campo vale 0, que es lo correcto cuando no sabemos.
+  if (decision.evaluado) {
+    caso.semaforo = decision.semaforo;
+    caso.tecnico_id = decision.tecnicoId;
+    caso.brote = decision.brote;
+    caso.prioridad = decision.prioridad;
+  }
 
   let respuesta: unknown;
   try {
@@ -205,7 +239,9 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
   let avisado = false;
   if (avisa && decision.semaforo) {
     if (ctx.config.simulacion) {
-      log.aviso(`[simulación] Se avisaría al coordinador por ${reporte.id}: semáforo ${decision.semaforo}`);
+      log.aviso(
+        `[simulación] Se avisaría al coordinador por ${reporte.id}: semáforo ${decision.semaforo}${decision.brote ? " · BROTE" : ""}`,
+      );
     } else {
       const texto = reporte.texto ?? transcripcion ?? "";
       avisado = await ctx.aprobaciones.solicitar({
@@ -215,6 +251,7 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
         plaga: caso.plaga ?? "desconocida",
         nombrePlaga: plaga?.nombre ?? "desconocida",
         prioridad: decision.prioridad,
+        brote: decision.brote === true,
         motivo: decision.detalle,
         tecnicoId: decision.tecnicoId,
         productor: reporte.productor_id,
@@ -234,6 +271,7 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
           para: "coordinador",
           mensaje:
             `Caso ${decision.semaforo} de plaga: ${plaga?.nombre ?? "desconocida"} (${caso.plaga ?? "desconocida"}). ` +
+            (decision.brote ? "HAY BROTE. " : "") +
             `Prioridad ${decision.prioridad ?? "?"}. Técnico: ${decision.tecnicoId ?? "sin técnico disponible"}. ` +
             `Productor: ${reporte.productor_id ?? "sin dato"} · Parcela: ${reporte.parcela_id ?? "sin dato"}.` +
             (resumen ? ` Mensaje: «${resumen}»` : ""),
@@ -287,6 +325,23 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
   if (ctx.config.simulacion) return { resuelto: false, aviso: avisa };
   ctx.estado.estadisticas.registrados++;
 
+  // Historial para los brotes: cuentan los casos nuevos de plaga, no los seguimientos.
+  // Lo dice la propia API: un seguimiento trae maximo 2.
+  if (decision.evaluado && plaga && reporte.parcela_id) {
+    const maximo = (respuesta as { maximo?: unknown } | null)?.maximo;
+    const parcela = ctx.parcelas.get(reporte.parcela_id);
+    const yaEsta = ctx.estado.casosParaBrote.some((c) => c.reporteId === reporte.id);
+    if (maximo !== 2 && parcela && !yaEsta) {
+      ctx.estado.casosParaBrote.push({
+        reporteId: reporte.id,
+        plaga: plaga.id,
+        lat: parcela.lat,
+        lon: parcela.lon,
+        recibido: Date.parse(reporte.recibido),
+      });
+    }
+  }
+
   // Copia en la base de datos. Va al final y nunca tumba el ciclo.
   if (ctx.supabase.configurado) {
     await ctx.supabase.guardarCaso({
@@ -298,6 +353,7 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
       plaga: caso.plaga ?? null,
       semaforo: decision.semaforo,
       tecnico_id: decision.tecnicoId,
+      brote: decision.brote,
       prioridad: decision.prioridad,
       confianza: clasificacion.confianza,
       motivo: clasificacion.motivo,

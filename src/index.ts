@@ -10,6 +10,32 @@ import { Supabase } from "./datos/supabase.ts";
 import { ejecutarCiclo, type Contexto } from "./bucle.ts";
 import { iniciarServidorWeb } from "./web/servidor.ts";
 
+/** Carga los casos de la semana pasada: cuentan para detectar brotes (regla de la sección 9). */
+async function sembrarBrote(ctx: Contexto): Promise<void> {
+  const vistos = new Set(ctx.estado.casosParaBrote.map((caso) => caso.reporteId));
+  let agregados = 0;
+  try {
+    for (const previo of await ctx.cliente.casosPrevios()) {
+      if (vistos.has(previo.reporte_id)) continue;
+      if (!Number.isFinite(previo.lat) || !Number.isFinite(previo.lon)) continue;
+      ctx.estado.casosParaBrote.push({
+        reporteId: previo.reporte_id,
+        plaga: previo.plaga,
+        lat: previo.lat,
+        lon: previo.lon,
+        recibido: Date.parse(previo.recibido),
+      });
+      vistos.add(previo.reporte_id);
+      agregados++;
+    }
+  } catch (error) {
+    log.aviso(
+      `No se pudieron leer los casos previos para los brotes: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  log.info(`Historial para brotes: ${ctx.estado.casosParaBrote.length} casos (${agregados} previos nuevos).`);
+}
+
 function dormir(ms: number): Promise<void> {
   return new Promise((resolver) => setTimeout(resolver, ms));
 }
@@ -78,6 +104,7 @@ async function main(): Promise<void> {
   };
   iniciarServidorWeb(config, () => ctx.estado, supabase);
   aprobaciones.iniciar();
+  await sembrarBrote(ctx);
 
   let activo = true;
   const apagar = (): void => {

@@ -70,6 +70,7 @@ export type Caso = {
   plaga?: string | null;
   semaforo?: Semaforo | null;
   tecnico_id?: string | null;
+  brote?: boolean | null;
   prioridad?: number | null;
   caso?: string | null;
 };

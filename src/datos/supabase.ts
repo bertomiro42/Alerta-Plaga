@@ -10,6 +10,7 @@ export type FilaCaso = {
   plaga: string | null;
   semaforo: string | null;
   tecnico_id: string | null;
+  brote: boolean | null;
   prioridad: number | null;
   confianza: number | null;
   motivo: string | null;

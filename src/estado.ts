@@ -1,12 +1,15 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Caso, Clasificacion, Reporte } from "./tipos.ts";
+import type { CasoParaBrote } from "./dominio/brote.ts";
 
 /** Un caso ya resuelto, con lo que sabemos del mensaje y lo que respondió la API. */
 export type CasoGuardado = Caso & {
   tipo?: string | null;
   motivo?: string | null;
   texto?: string | null;
+  parcela_id?: string | null;
+  brote?: boolean | null;
   recibido: string | null;
   registrado_en: string;
   avisado: boolean;
@@ -35,6 +38,8 @@ export type Estado = {
   clasificaciones: Record<string, Clasificacion>;
   /** Caché de las transcripciones de notas de voz. */
   transcripciones: Record<string, string>;
+  /** Casos que cuentan para detectar brotes (de /casos-previos y los nuestros). */
+  casosParaBrote: CasoParaBrote[];
   casos: CasoGuardado[];
   estadisticas: Estadisticas;
 };
@@ -46,6 +51,7 @@ export function estadoInicial(): Estado {
     pendientes: [],
     clasificaciones: {},
     transcripciones: {},
+    casosParaBrote: [],
     casos: [],
     estadisticas: { ciclos: 0, registrados: 0, avisos: 0, errores: 0, ultimoCiclo: null },
   };
@@ -85,6 +91,7 @@ export async function cargarEstado(rutaDatos: string): Promise<Estado> {
         typeof datos.transcripciones === "object" && datos.transcripciones !== null
           ? datos.transcripciones
           : {},
+      casosParaBrote: Array.isArray(datos.casosParaBrote) ? datos.casosParaBrote : [],
       casos: Array.isArray(datos.casos) ? datos.casos : [],
       estadisticas: estadisticasDe(datos.estadisticas),
     };
