@@ -210,6 +210,21 @@ Los **seguimientos** («¿ya vieron lo del gusano?», «sigue igual») sí son r
 
 Si no se puede aplicar una regla (falta la plaga o falta la parcela), el campo **no se manda**. Mandarlo en `null` cuenta como respuesta y puede restar −1; no mandarlo vale 0, que es lo correcto cuando no sabemos.
 
+### Cuando el mensaje no trae la parcela
+
+El sistema intenta ubicarla: la parcela única del productor, la que se mencione por su **nombre** en el texto (*«le hablo de la parcela La Cruz»*) o la más cercana si el mensaje trae coordenadas. Si aun así no la encuentra, **le pregunta al productor** con `POST /preguntas` y espera su respuesta hasta **30 minutos** antes de registrar.
+
+Cuando el productor contesta, se registra **con el folio original** y la respuesta no se registra aparte, como indican las reglas (sección 6). Las preguntas quedan en el estado, así que un reinicio no las pierde.
+
+### Reintentar las plagas sin identificar
+
+```bash
+pnpm reintentar -- --simular   # revisa qué mensajes tienen pistas de verdad
+pnpm reintentar                # insiste con los síntomas y manda semáforo, técnico y brote
+```
+
+Ojo: si la plaga que propone es equivocada, esos tres campos también restan, así que solo compensa cuando el texto trae síntomas claros.
+
 ## Cómo se decide
 
 - **¿Es reporte de plaga?** Lo decide el agente: describe un problema en el cultivo (también los seguimientos). Saludos, precios, trámites o fotos de otra cosa no lo son.
@@ -252,6 +267,8 @@ El código se escribió con un agente de IA como copiloto (las reglas lo permite
 | `pnpm probar -- --texto "…"` | El agente de punta a punta | — |
 | `pnpm telegram` | El aviso al coordinador | — |
 | `pnpm avisar -- --reporte RX` | Reenviar el aviso con botones | — |
+| `pnpm complementar -- --simular` | Completar lo registrado y reconstruir el historial | 88 casos, +74 y +81 puntos |
+| `pnpm reintentar -- --simular` | Reintentar plagas sin identificar | 2 de 15 con pistas |
 
 ## Licencia
 
