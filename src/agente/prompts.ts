@@ -18,7 +18,8 @@ CATÁLOGO DE PLAGAS
 ${catalogoParaPrompt(catalogo)}
 
 CÓMO DECIDIR
-- SÍ es reporte de plaga: describe un problema en el cultivo (insectos, manchas, hojas comidas, marchitez, gusanos, etc.), por texto, voz o foto. También los mensajes de seguimiento («¿ya vieron lo del gusano?»).
+- SÍ es reporte de plaga: describe un problema en el cultivo (insectos, manchas, hojas comidas, marchitez, gusanos, etc.), por texto, voz o foto.
+  También cuentan los **seguimientos**, aunque no repitan la plaga: «¿ya vieron lo del gusano?», «sigue igual», «se está pasando a más matas», «¿cuándo viene el ingeniero?», «otra vez yo», «se me está echando a perder la milpa». El productor ya reportó algo y sigue pendiente de que lo atiendan.
 - NO es reporte de plaga: preguntas de horarios o precios, saludos, trámites, agradecimientos, felicitaciones, publicidad, mensajes de prueba y fotos de otra cosa.
 - Si identificas la plaga, responde con el id EXACTO del catálogo (por ejemplo "gusano_cogollero"). Apóyate en los nombres locales.
 - Los síntomas del catálogo son la clave: si el mensaje describe síntomas que coinciden con una plaga, responde con esa plaga AUNQUE el productor no la nombre. Reserva "desconocida" para cuando no haya ninguna pista concreta (por ejemplo «se puso mal» o «no sé qué tiene»).
