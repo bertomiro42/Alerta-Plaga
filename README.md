@@ -34,6 +34,7 @@ GET /reportes ──► agente de IA ──► reglas (prioridad, semáforo, té
 | `src/dominio/prioridad.ts` | Prioridad y semáforo (fórmulas del reto, sin IA). |
 | `src/dominio/tecnico.ts` | Elección del técnico (especialidad, carga y distancia). |
 | `src/dominio/brote.ts` | Detección de brotes (3 casos, 5 km, 168 h). |
+| `src/dominio/vecinos.ts` | Vecinos a avisar cuando hay brote (mismo cultivo, 5 km). |
 | `src/dominio/geo.ts` | Distancia con haversine (R = 6371 km). |
 | `src/catalogo.ts` | Normaliza `GET /plagas` y arma el texto para el agente. |
 | `src/api/cliente.ts` | Cliente de la API del hackathon. |
@@ -240,8 +241,16 @@ Cuando un caso sale **rojo o naranja**, o cuando hay **brote**:
 2. Al aprobar, se avisa **al productor su folio** (`POST /avisos`, `tipo: folio`) y **al técnico su caso** (`tipo: asignacion`). Si el coordinador cambió de técnico, se avisa al elegido.
 3. En todos los casos rojo/naranja o con brote queda constancia en el buzón de la junta (`tipo: escalamiento`, `para: coordinador`).
 4. Si la plaga es **cuarentenaria**, además se avisa de inmediato a **sanidad vegetal** (`tipo: cuarentenaria`, `para: sanidad_vegetal`).
+5. Si hay **brote**, se avisa a los **productores vecinos**: los que tienen una parcela del **mismo cultivo a menos de 5 km** (sin contar al que reportó), con `tipo: brote` y `para` con la lista de productores.
 
 Las aprobaciones pendientes se guardan en `.data/aprobaciones.json`, así que sobreviven a un reinicio del servidor.
+
+Para ensayar cualquier aviso sin mandarlo:
+
+```bash
+pnpm avisar -- --reporte R-2124 --simular   # dice a cuántos vecinos avisaría
+pnpm avisar -- --reporte R-2124             # lo manda
+```
 
 ## Notas del repositorio
 
@@ -266,7 +275,8 @@ El código se escribió con un agente de IA como copiloto (las reglas lo permite
 | `pnpm plagas` | Catálogo: especialidades, etapas y severidades | — |
 | `pnpm probar -- --texto "…"` | El agente de punta a punta | — |
 | `pnpm telegram` | El aviso al coordinador | — |
-| `pnpm avisar -- --reporte RX` | Reenviar el aviso con botones | — |
+| `pnpm avisar -- --reporte RX --simular` | Ver a quién avisaría (coordinador y vecinos) | — |
+| `pnpm avisar -- --reporte RX` | Reenviar el aviso con botones y a los vecinos | 2 vecinos en R-2124 |
 | `pnpm complementar -- --simular` | Completar lo registrado y reconstruir el historial | 88 casos, +74 y +81 puntos |
 | `pnpm reintentar -- --simular` | Reintentar plagas sin identificar | 2 de 15 con pistas |
 
