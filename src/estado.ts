@@ -10,6 +10,8 @@ export type CasoGuardado = Caso & {
   texto?: string | null;
   parcela_id?: string | null;
   brote?: boolean | null;
+  /** true cuando ya se escaló al coordinador por pasarse el plazo sin visita. */
+  escalado?: boolean;
   recibido: string | null;
   registrado_en: string;
   avisado: boolean;

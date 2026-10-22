@@ -1,4 +1,4 @@
-import type { Aviso, Caso, CasoPrevio, Parcela, Pregunta, Reporte, Tecnico } from "../tipos.ts";
+import type { Aviso, Caso, CasoPrevio, Parcela, Pregunta, Reporte, Tecnico, Visita } from "../tipos.ts";
 
 /** Acepta la respuesta como lista directa o envuelta en una clave. */
 function comoLista<T>(datos: unknown, claves: string[]): T[] {
@@ -149,5 +149,10 @@ export class ClienteApi {
       "casos_previos",
       "items",
     ]);
+  }
+
+  /** Visitas que han registrado los técnicos (sirve para vigilar los plazos). */
+  async visitas(): Promise<Visita[]> {
+    return comoLista<Visita>(await this.pedir<unknown>("GET", "/visitas"), ["visitas", "items"]);
   }
 }

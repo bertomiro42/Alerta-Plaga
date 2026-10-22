@@ -61,6 +61,13 @@ export type Tecnico = {
   tope: number;
 };
 
+/** Una visita que registró un técnico: GET /visitas */
+export type Visita = {
+  reporte_id: string;
+  tecnico_id: string;
+  fecha: string;
+};
+
 export type Semaforo = "rojo" | "naranja" | "amarillo" | "verde";
 
 /** El resultado que se registra con POST /casos. */

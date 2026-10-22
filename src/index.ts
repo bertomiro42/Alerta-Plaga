@@ -128,9 +128,9 @@ async function main(): Promise<void> {
     const inicio = Date.now();
     try {
       const resumen = await ejecutarCiclo(ctx);
-      if (resumen.nuevos > 0 || resumen.registrados > 0 || resumen.pendientes > 0) {
+      if (resumen.nuevos > 0 || resumen.registrados > 0 || resumen.pendientes > 0 || resumen.escalados > 0) {
         log.info(
-          `Ciclo: ${resumen.nuevos} nuevos, ${resumen.registrados} registrados, ${resumen.avisos} avisos, ${resumen.pendientes} pendientes.`,
+          `Ciclo: ${resumen.nuevos} nuevos, ${resumen.registrados} registrados, ${resumen.avisos} avisos, ${resumen.pendientes} pendientes, ${resumen.escalados} escalados.`,
         );
       }
     } catch (error) {

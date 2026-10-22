@@ -1,4 +1,4 @@
-import type { Caso, Clasificacion, Parcela, Plaga, Reporte, Semaforo, Tecnico } from "./tipos.ts";
+import type { Caso, Clasificacion, Parcela, Plaga, Reporte, Semaforo, Tecnico, Visita } from "./tipos.ts";
 import type { ClienteApi } from "./api/cliente.ts";
 import type { Config } from "./config.ts";
 import type { Supabase } from "./datos/supabase.ts";
@@ -11,6 +11,7 @@ import { calcularPrioridad, detallePrioridad, PCT_POR_DEFECTO, semaforoDePriorid
 import { elegirTecnico } from "./dominio/tecnico.ts";
 import { hayBrote, type CasoParaBrote } from "./dominio/brote.ts";
 import { productoresVecinos } from "./dominio/vecinos.ts";
+import { horasDePlazo, horasTranscurridas, plazoVencido } from "./dominio/plazos.ts";
 import { distanciaKm } from "./dominio/geo.ts";
 import { guardarEstado } from "./estado.ts";
 import { ErrorApi } from "./api/cliente.ts";
@@ -36,6 +37,7 @@ export type ResumenCiclo = {
   registrados: number;
   avisos: number;
   pendientes: number;
+  escalados: number;
 };
 
 /** Cuántos mensajes pide por página (el máximo de la API es 1000). */
@@ -517,9 +519,68 @@ async function procesarReporte(ctx: Contexto, reporte: Reporte): Promise<Resulta
   return cerrarCaso(ctx, reporte, caso, clasificacion, decision, plaga, parcela, textoDe(ctx, reporte));
 }
 
+/** Cuántos casos se escalan como máximo por ciclo, para no mandar cien avisos de golpe. */
+const MAX_ESCALADOS_POR_CICLO = 20;
+
+/**
+ * Vigila los plazos: si un caso lleva más tiempo del que le toca por su semáforo
+ * (rojo 24 h, naranja 48 h, amarillo 72 h, verde 7 días) y no tiene visita en
+ * GET /visitas, se escala al coordinador. Se escala una sola vez por caso.
+ */
+export async function revisarPlazos(ctx: Contexto): Promise<number> {
+  const candidatos = ctx.estado.casos.filter(
+    (caso) => caso.es_plaga && caso.semaforo && caso.recibido && !caso.escalado && !caso.simulado,
+  );
+  if (candidatos.length === 0) return 0;
+
+  let visitas: Visita[] = [];
+  try {
+    visitas = await ctx.cliente.visitas();
+  } catch (error) {
+    log.aviso(`No se pudieron leer las visitas: ${error instanceof Error ? error.message : String(error)}`);
+    return 0;
+  }
+  const visitados = new Set(visitas.map((visita) => visita.reporte_id));
+
+  const ahora = Date.now();
+  let escalados = 0;
+
+  for (const caso of candidatos) {
+    if (visitados.has(caso.reporte_id)) {
+      // Ya la atendieron: no hay nada que escalar.
+      caso.escalado = true;
+      continue;
+    }
+    if (escalados >= MAX_ESCALADOS_POR_CICLO) break;
+
+    const semaforo = caso.semaforo as Semaforo;
+    const recibido = caso.recibido as string;
+    if (!plazoVencido(semaforo, recibido, ahora)) continue;
+
+    const horas = Math.round(horasTranscurridas(recibido, ahora));
+    try {
+      await ctx.cliente.enviarAviso({
+        reporte_id: caso.reporte_id,
+        tipo: "escalamiento",
+        para: "coordinador",
+        mensaje:
+          `El caso ${caso.reporte_id} (semáforo ${semaforo}) lleva ${horas} h sin visita y su plazo era de ${horasDePlazo(semaforo)} h. ` +
+          `Plaga: ${caso.plaga ?? "desconocida"}. Parcela: ${caso.parcela_id ?? "sin identificar"}. Técnico asignado: ${caso.tecnico_id ?? "sin técnico"}.`,
+      });
+      caso.escalado = true;
+      escalados++;
+    } catch (error) {
+      log.error(`No se pudo escalar ${caso.reporte_id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (escalados > 0) log.info(`Se escalaron ${escalados} casos por pasarse el plazo sin visita.`);
+  return escalados;
+}
+
 /** Un ciclo completo: recibir → interpretar → decidir → avisar → registrar. */
 export async function ejecutarCiclo(ctx: Contexto): Promise<ResumenCiclo> {
-  const resumen: ResumenCiclo = { nuevos: 0, registrados: 0, avisos: 0, pendientes: 0 };
+  const resumen: ResumenCiclo = { nuevos: 0, registrados: 0, avisos: 0, pendientes: 0, escalados: 0 };
 
   const traidos = await traerReportes(ctx.cliente, desdeParaConsulta(ctx.estado, ctx.config));
 
@@ -570,6 +631,11 @@ export async function ejecutarCiclo(ctx: Contexto): Promise<ResumenCiclo> {
   ctx.estado.estadisticas.ciclos++;
   ctx.estado.estadisticas.ultimoCiclo = new Date().toISOString();
   resumen.pendientes = pendientesFinales.length;
+
+  // Plazos: se revisa una vez por ciclo (no en simulación).
+  if (!ctx.config.simulacion) {
+    resumen.escalados = await revisarPlazos(ctx);
+  }
 
   await guardarEstado(ctx.config.rutaDatos, ctx.estado);
   return resumen;
