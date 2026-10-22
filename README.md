@@ -236,7 +236,22 @@ Las aprobaciones pendientes se guardan en `.data/aprobaciones.json`, así que so
 
 ## Quién hizo qué
 
-- _(escribe aquí el nombre de cada integrante y qué hizo)_
+Equipo de una persona.
+
+- **José Alberto Miranda Rodríguez**: diseño del sistema; agente de IA (clasificación de plaga y porcentaje afectado); reglas de prioridad, semáforo, técnico y brote; bot de Telegram con aprobación del coordinador; panel web; base de datos en Supabase y despliegue en el servidor del curso.
+
+El código se escribió con un agente de IA como copiloto (las reglas lo permiten), revisando y probando cada parte contra la API: el catálogo, los 40 casos previos y los mensajes reales.
+
+## Cómo se comprobó
+
+| Prueba | Qué revisa | Cómo |
+| --- | --- | --- |
+| `pnpm typecheck` | Que el código compile | 0 errores |
+| `pnpm reglas` | Prioridad, semáforo, técnico y brote | 40/40 contra `/casos-previos` |
+| `pnpm plagas` | Catálogo: especialidades, etapas y severidades | — |
+| `pnpm probar -- --texto "…"` | El agente de punta a punta | — |
+| `pnpm telegram` | El aviso al coordinador | — |
+| `pnpm avisar -- --reporte RX` | Reenviar el aviso con botones | — |
 
 ## Licencia
 
